@@ -1,0 +1,33 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37314.3 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "logicell.client", "logicell.client\logicell.client.esproj", "{DBF09F6F-E7AC-C296-0501-274FD7AB56BD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LogiCell.Server", "LogiCell.Server\LogiCell.Server.csproj", "{87534D8E-5DB8-4982-87B3-1C255C696C17}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DBF09F6F-E7AC-C296-0501-274FD7AB56BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DBF09F6F-E7AC-C296-0501-274FD7AB56BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DBF09F6F-E7AC-C296-0501-274FD7AB56BD}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{DBF09F6F-E7AC-C296-0501-274FD7AB56BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DBF09F6F-E7AC-C296-0501-274FD7AB56BD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DBF09F6F-E7AC-C296-0501-274FD7AB56BD}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{87534D8E-5DB8-4982-87B3-1C255C696C17}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87534D8E-5DB8-4982-87B3-1C255C696C17}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87534D8E-5DB8-4982-87B3-1C255C696C17}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87534D8E-5DB8-4982-87B3-1C255C696C17}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {19C9F66E-791F-48A6-9767-A93C58081E86}
+	EndGlobalSection
+EndGlobal
