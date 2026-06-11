@@ -1,3 +1,6 @@
+using LogiCell.Server.Models;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -7,8 +10,22 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddDbContext<LogiCellDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("PermitirReact", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173") // El puerto de Vite
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 var app = builder.Build();
 
+app.UseCors("PermitirReact");
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
