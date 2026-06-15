@@ -91,6 +91,7 @@ public partial class LogiCellDbContext : DbContext
         {
             entity.HasKey(e => e.IdSolicitud).HasName("PK__Solicitu__36899CEFBA899DA1");
 
+            entity.Property(e => e.DescripcionImportacion).HasMaxLength(255);
             entity.Property(e => e.EstadoSolicitud)
                 .HasMaxLength(50)
                 .HasDefaultValue("Pendiente");
@@ -105,7 +106,6 @@ public partial class LogiCellDbContext : DbContext
 
             entity.HasOne(d => d.IdRepuestoNavigation).WithMany(p => p.Solicitudes)
                 .HasForeignKey(d => d.IdRepuesto)
-                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Solicitudes_Repuestos");
 
             entity.HasOne(d => d.IdUsuarioAtiendeNavigation).WithMany(p => p.SolicitudeIdUsuarioAtiendeNavigations)

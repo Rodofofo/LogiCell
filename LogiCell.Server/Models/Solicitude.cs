@@ -11,7 +11,7 @@ public partial class Solicitude
 
     public int? IdUsuarioAtiende { get; set; }
 
-    public int IdRepuesto { get; set; }
+    public int? IdRepuesto { get; set; }
 
     public string TipoSolicitud { get; set; } = null!;
 
@@ -27,7 +27,9 @@ public partial class Solicitude
 
     public DateTime? FechaEsperadaDevolucion { get; set; }
 
-    public virtual Repuesto IdRepuestoNavigation { get; set; } = null!;
+    public string? DescripcionImportacion { get; set; }
+
+    public virtual Repuesto? IdRepuestoNavigation { get; set; }
 
     public virtual Usuario? IdUsuarioAtiendeNavigation { get; set; }
 

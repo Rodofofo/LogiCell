@@ -129,7 +129,6 @@ const DashboardLogistico = () => {
                 </div>
 
                 {/* MENÚ DE PESTAÑAS (TABS) */}
-                {/* MENÚ DE PESTAÑAS (TABS) */}
                 <ul className="nav nav-tabs border-secondary mb-4">
                     <li className="nav-item">
                         <button
