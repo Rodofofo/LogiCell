@@ -4,52 +4,66 @@ import Footer from '../components/Footer';
 import Swal from 'sweetalert2';
 
 const DashboardLogistico = () => {
-    // 1. PESTAÑA ACTIVA ('inventario' o 'solicitudes')
+    // 1. PESTAÑA ACTIVA (Inicia en solicitudes por preferencia de UX)
     const [tabActiva, setTabActiva] = useState('solicitudes');
 
-    // 2. MOCK DATA: INVENTARIO DE REPUESTOS
+    // 2. MOCK DATA: INVENTARIO DE REPUESTOS (Ubicaciones actualizadas)
     const [repuestos, setRepuestos] = useState([
-        { idRepuesto: 1, numeroSerial: 'RBS-TX-001', nombre: 'Transceptor RBS 6000', descripcion: 'Módulo de radiofrecuencia principal', bodega: 'Bodega Central', estadoOperativo: 'Disponible' },
-        { idRepuesto: 2, numeroSerial: 'BTS-ANT-045', nombre: 'Antena Sectorial 65°', descripcion: 'Antena para panel BTS', bodega: 'Bodega Central', estadoOperativo: 'Reservado' },
-        { idRepuesto: 3, numeroSerial: 'CAB-FO-100', nombre: 'Bobina Fibra Óptica 100m', descripcion: 'Cable monomodo para conexiones de sitio', bodega: 'Bodega Norte', estadoOperativo: 'Disponible' }
+        { idRepuesto: 1, numeroSerial: 'RBS-TX-001', nombre: 'Transceptor RBS 6000', descripcion: 'Módulo de radiofrecuencia principal', bodega: 'Metro Este', estadoOperativo: 'Disponible' },
+        { idRepuesto: 2, numeroSerial: 'BTS-ANT-045', nombre: 'Antena Sectorial 65°', descripcion: 'Antena para panel BTS', bodega: 'Metro Este', estadoOperativo: 'Reservado' },
+        { idRepuesto: 3, numeroSerial: 'CAB-FO-100', nombre: 'Bobina Fibra Óptica 100m', descripcion: 'Cable monomodo para conexiones de sitio', bodega: 'Huetar', estadoOperativo: 'Disponible' }
     ]);
 
-    // 3. MOCK DATA: BANDEJA DE SOLICITUDES (NUEVO)
+    // 3. MOCK DATA: BANDEJA DE SOLICITUDES AMPLIADA (Tipos de solicitud mapeados con la BD)
     const [solicitudes, setSolicitudes] = useState([
         {
             idSolicitud: 101,
             tecnico: 'juan.tecnico@logicell.com',
-            fecha: '10/06/2026',
+            fecha: '14/06/2026',
             sitioMotivo: 'BTS-SJ-045 (Falla de Tx)',
             materiales: '1x Transceptor RBS 6000',
-            estado: 'Pendiente'
+            tipoSolicitud: 'Despacho',
+            estado: 'Pendiente',
+            motivoRechazo: null
         },
         {
-            idSolicitud: 102,
+            idSolicitud: 103,
+            tecnico: 'pedro.tecnico@logicell.com',
+            fecha: '14/06/2026',
+            sitioMotivo: 'ANT-OLD-99 (Pieza dañada en campo)',
+            materiales: '1x Antena Sectorial Dañada',
+            tipoSolicitud: 'Devolución',
+            estado: 'Pendiente',
+            motivoRechazo: null
+        },
+        {
+            idSolicitud: 104,
             tecnico: 'maria.tecnico@logicell.com',
-            fecha: '09/06/2026',
-            sitioMotivo: 'RBS-A-102 (Ampliación)',
-            materiales: '2x Bobina Fibra Óptica 100m',
-            estado: 'Aprobado'
+            fecha: '13/06/2026',
+            sitioMotivo: 'Sitio Ampliación Limón (Sin Stock Local)',
+            materiales: 'Transceptor Ericsson Baseband 6630',
+            tipoSolicitud: 'Importación',
+            estado: 'Pendiente',
+            motivoRechazo: null
         }
     ]);
 
-    // 4. ESTADOS PARA EL MODAL DE REPUESTOS
+    // 4. ESTADOS PARA EL MODAL DE CREACIÓN/EDICIÓN DE REPUESTOS
     const [mostrarModal, setMostrarModal] = useState(false);
     const [modoEdicion, setModoEdicion] = useState(false);
     const [idEdicion, setIdEdicion] = useState(null);
     const [serial, setSerial] = useState('');
     const [nombre, setNombre] = useState('');
     const [descripcion, setDescripcion] = useState('');
-    const [bodega, setBodega] = useState('Bodega Central');
+    const [bodega, setBodega] = useState('Metro Este'); // Actualizado al valor por defecto nuevo
 
-    // 5. FUNCIONES PARA MODAL DE INVENTARIO
+    // --- FUNCIONES DEL INVENTARIO ---
     const abrirModalCrear = () => {
         setModoEdicion(false);
         setSerial('');
         setNombre('');
         setDescripcion('');
-        setBodega('Bodega Central');
+        setBodega('Metro Este'); // Actualizado al valor por defecto nuevo
         setMostrarModal(true);
     };
 
@@ -92,29 +106,55 @@ const DashboardLogistico = () => {
         }
     };
 
-    // 6. FUNCIONES DE LA BANDEJA DE SOLICITUDES (NUEVO)
+    // --- FUNCIONES DE LA BANDEJA DE SOLICITUDES (CON RECHAZO CON MOTIVO RF10) ---
     const handleProcesarSolicitud = async (idSolicitud, nuevoEstado) => {
-        const accion = nuevoEstado === 'Aprobado' ? 'aprobar' : 'rechazar';
-        const colorBoton = nuevoEstado === 'Aprobado' ? '#198754' : '#dc3545';
+        if (nuevoEstado === 'Rechazado') {
+            // Cumplimiento del RF10: Ventana interactiva para capturar el motivo de rechazo
+            const { value: motivo } = await Swal.fire({
+                title: 'Rechazar Solicitud',
+                text: 'Por favor, ingrese el motivo del rechazo para notificar al técnico:',
+                input: 'text',
+                inputPlaceholder: 'Ej. Ubicación incorrecta, datos de sitio erróneos...',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Confirmar Rechazo',
+                cancelButtonText: 'Cancelar',
+                background: '#212529',
+                color: '#fff',
+                inputValidator: (value) => {
+                    if (!value) {
+                        return '¡Debe ingresar un motivo para rechazar la solicitud!';
+                    }
+                }
+            });
 
-        const confirmacion = await Swal.fire({
-            title: `¿Deseas ${accion} esta solicitud?`,
-            text: `La solicitud cambiará al estado de ${nuevoEstado}.`,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: colorBoton,
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: `Sí, ${accion}`,
-            cancelButtonText: 'Cancelar',
-            background: '#212529',
-            color: '#fff'
-        });
+            if (motivo) {
+                setSolicitudes(solicitudes.map(sol =>
+                    sol.idSolicitud === idSolicitud ? { ...sol, estado: 'Rechazado', motivoRechazo: motivo } : sol
+                ));
+                Swal.fire({ icon: 'error', title: 'Solicitud Rechazada', text: 'Se registró el motivo y se liberó el flujo.', background: '#212529', color: '#fff', timer: 2000, showConfirmButton: false });
+            }
+        } else {
+            // Aprobación normal (Despacho, Devolución o Importación)
+            const confirmacion = await Swal.fire({
+                title: '¿Aprobar esta transacción?',
+                text: `La solicitud cambiará al estado de ${nuevoEstado}.`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sí, aprobar',
+                background: '#212529', color: '#fff'
+            });
 
-        if (confirmacion.isConfirmed) {
-            setSolicitudes(solicitudes.map(sol =>
-                sol.idSolicitud === idSolicitud ? { ...sol, estado: nuevoEstado } : sol
-            ));
-            Swal.fire({ icon: 'success', title: 'Procesado', text: `Solicitud ${nuevoEstado} con éxito.`, background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+            if (confirmacion.isConfirmed) {
+                setSolicitudes(solicitudes.map(sol =>
+                    sol.idSolicitud === idSolicitud ? { ...sol, estado: nuevoEstado } : sol
+                ));
+                Swal.fire({ icon: 'success', title: 'Aprobado', text: 'Transacción procesada correctamente.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+            }
         }
     };
 
@@ -123,9 +163,58 @@ const DashboardLogistico = () => {
             <Navbar />
 
             <div className="flex-grow-1 container-fluid p-4 text-light pb-5">
-                {/* Encabezado Principal */}
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h2><i className="bi bi-building-gear text-success me-2"></i>Centro de Control Logístico</h2>
+                {/* 1. DASHBOARD INFORMATIVO / CONTADORES SUPERIORES (RF7) */}
+                <div className="row mb-4">
+                    <div className="col-xl-3 col-md-6 mb-3">
+                        <div className="card bg-secondary border-0 shadow-sm text-light h-100">
+                            <div className="card-body d-flex align-items-center justify-content-between p-4">
+                                <div>
+                                    <h6 className="text-white-50 text-uppercase small fw-bold">Total Repuestos</h6>
+                                    <h3 className="fw-bold mb-0 text-white">{repuestos.length}</h3>
+                                </div>
+                                <i className="bi bi-box-seam fs-1 text-white"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="col-xl-3 col-md-6 mb-3">
+                        <div className="card bg-secondary border-0 shadow-sm text-light h-100">
+                            <div className="card-body d-flex align-items-center justify-content-between p-4">
+                                <div>
+                                    <h6 className="text-white-50 text-uppercase small fw-bold">Despachos Pendientes</h6>
+                                    <h3 className="fw-bold mb-0 text-warning">
+                                        {solicitudes.filter(s => s.tipoSolicitud === 'Despacho' && s.estado === 'Pendiente').length}
+                                    </h3>
+                                </div>
+                                <i className="bi bi-truck fs-1 text-warning"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="col-xl-3 col-md-6 mb-3">
+                        <div className="card bg-secondary border-0 shadow-sm text-light h-100">
+                            <div className="card-body d-flex align-items-center justify-content-between p-4">
+                                <div>
+                                    <h6 className="text-white-50 text-uppercase small fw-bold">Devoluciones en Trámite</h6>
+                                    <h3 className="fw-bold mb-0 text-danger">
+                                        {solicitudes.filter(s => s.tipoSolicitud === 'Devolución' && s.estado === 'Pendiente').length}
+                                    </h3>
+                                </div>
+                                <i className="bi bi-arrow-return-left fs-1 text-danger"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="col-xl-3 col-md-6 mb-3">
+                        <div className="card bg-secondary border-0 shadow-sm text-light h-100">
+                            <div className="card-body d-flex align-items-center justify-content-between p-4">
+                                <div>
+                                    <h6 className="text-white-50 text-uppercase small fw-bold">Trámites Importación</h6>
+                                    <h3 className="fw-bold mb-0 text-info">
+                                        {solicitudes.filter(s => s.tipoSolicitud === 'Importación' && s.estado === 'Pendiente').length}
+                                    </h3>
+                                </div>
+                                <i className="bi bi-globe fs-1 text-info"></i>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* MENÚ DE PESTAÑAS (TABS) */}
@@ -153,7 +242,86 @@ const DashboardLogistico = () => {
                     </li>
                 </ul>
 
-                {/* CONTENIDO PESTAÑA 1: INVENTARIO DE REPUESTOS */}
+                {/* CONTENIDO PESTAÑA: BANDEJA DE SOLICITUDES */}
+                {tabActiva === 'solicitudes' && (
+                    <div className="card bg-secondary border-0 shadow">
+                        <div className="card-body p-0">
+                            <table className="table table-dark table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th className="px-4 py-3">ID</th>
+                                        <th className="py-3">Tipo</th>
+                                        <th className="py-3">Técnico</th>
+                                        <th className="py-3">Fecha</th>
+                                        <th className="py-3">Justificación</th>
+                                        <th className="py-3">Componente Solicitado</th>
+                                        <th className="py-3 text-center">Estado</th>
+                                        <th className="py-3 text-center">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {solicitudes.map((sol) => (
+                                        <tr key={sol.idSolicitud}>
+                                            <td className="px-4 align-middle fw-bold text-warning">#{sol.idSolicitud}</td>
+                                            <td className="align-middle">
+                                                <span className={`badge border ${sol.tipoSolicitud === 'Despacho' ? 'border-warning text-warning' :
+                                                    sol.tipoSolicitud === 'Devolución' ? 'border-danger text-danger' : 'border-info text-info'
+                                                    }`}>
+                                                    {sol.tipoSolicitud}
+                                                </span>
+                                            </td>
+                                            <td className="align-middle small">{sol.tecnico}</td>
+                                            <td className="align-middle small">{sol.fecha}</td>
+                                            <td className="align-middle fw-bold text-light">{sol.sitioMotivo}</td>
+                                            <td className="align-middle text-info small fw-bold">
+                                                {sol.tipoSolicitud === 'Importación' ? <i className="bi bi-airplane-fill me-1 text-white-50"></i> : null}
+                                                {sol.materiales}
+                                            </td>
+                                            <td className="align-middle text-center">
+                                                {sol.estado === 'Pendiente' ? (
+                                                    <span className="badge bg-warning text-dark">{sol.estado}</span>
+                                                ) : sol.estado === 'Aprobado' ? (
+                                                    <span className="badge bg-success">{sol.estado}</span>
+                                                ) : (
+                                                    <div className="d-flex flex-column align-items-center">
+                                                        <span className="badge bg-danger mb-1">{sol.estado}</span>
+                                                        <span className="text-white-50 text-center" style={{ fontSize: '0.75rem', maxWidth: '150px' }}>
+                                                            {sol.motivoRechazo}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="align-middle text-center">
+                                                {sol.estado === 'Pendiente' ? (
+                                                    <div className="d-flex justify-content-center">
+                                                        <button
+                                                            onClick={() => handleProcesarSolicitud(sol.idSolicitud, 'Aprobado')}
+                                                            className="btn btn-sm btn-success me-2"
+                                                            title={sol.tipoSolicitud === 'Importación' ? 'Autorizar Importación' : 'Aprobar Transacción'}
+                                                        >
+                                                            <i className="bi bi-check-lg"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleProcesarSolicitud(sol.idSolicitud, 'Rechazado')}
+                                                            className="btn btn-sm btn-danger"
+                                                            title="Rechazar e ingresar motivo"
+                                                        >
+                                                            <i className="bi bi-x-lg"></i>
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-white-50 small italic">Procesada</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* CONTENIDO PESTAÑA: INVENTARIO DE REPUESTOS */}
                 {tabActiva === 'inventario' && (
                     <div>
                         <div className="d-flex justify-content-end mb-3">
@@ -200,68 +368,6 @@ const DashboardLogistico = () => {
                         </div>
                     </div>
                 )}
-
-                {/* CONTENIDO PESTAÑA 2: BANDEJA DE SOLICITUDES (NUEVO) */}
-                {tabActiva === 'solicitudes' && (
-                    <div className="card bg-secondary border-0 shadow">
-                        <div className="card-body p-0">
-                            <table className="table table-dark table-hover mb-0">
-                                <thead>
-                                    <tr>
-                                        <th className="px-4 py-3">ID Pedido</th>
-                                        <th className="py-3">Técnico Solicitante</th>
-                                        <th className="py-3">Fecha</th>
-                                        <th className="py-3">Sitio / Motivo</th>
-                                        <th className="py-3">Materiales Pedidos</th>
-                                        <th className="py-3 text-center">Estado</th>
-                                        <th className="py-3 text-center">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {solicitudes.map((sol) => (
-                                        <tr key={sol.idSolicitud}>
-                                            <td className="px-4 align-middle fw-bold text-warning">#{sol.idSolicitud}</td>
-                                            <td className="align-middle small">{sol.tecnico}</td>
-                                            <td className="align-middle small">{sol.fecha}</td>
-                                            <td className="align-middle fw-bold text-light">{sol.sitioMotivo}</td>
-                                            <td className="align-middle text-info small fw-bold">{sol.materiales}</td>
-                                            <td className="align-middle text-center">
-                                                <span className={`badge ${sol.estado === 'Pendiente' ? 'bg-warning text-dark' :
-                                                        sol.estado === 'Aprobado' ? 'bg-success' : 'bg-danger'
-                                                    }`}>
-                                                    {sol.estado}
-                                                </span>
-                                            </td>
-                                            <td className="align-middle text-center">
-                                                {sol.estado === 'Pendiente' ? (
-                                                    <>
-                                                        <button
-                                                            onClick={() => handleProcesarSolicitud(sol.idSolicitud, 'Aprobado')}
-                                                            className="btn btn-sm btn-success me-2"
-                                                            title="Aprobar Solicitud"
-                                                        >
-                                                            <i className="bi bi-check-lg"></i>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleProcesarSolicitud(sol.idSolicitud, 'Rechazado')}
-                                                            className="btn btn-sm btn-danger"
-                                                            title="Rechazar Solicitud"
-                                                        >
-                                                            <i className="bi bi-xl-lg"></i>
-                                                            <i className="bi bi-x-lg"></i>
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                    <span className="text-muted small italic">Procesada</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
             </div>
 
             <Footer />
@@ -285,8 +391,12 @@ const DashboardLogistico = () => {
                                         <div className="col-md-6 mb-3">
                                             <label className="form-label small fw-bold">Bodega de Destino</label>
                                             <select className="form-select bg-secondary text-light border-dark" value={bodega} onChange={(e) => setBodega(e.target.value)}>
-                                                <option value="Bodega Central">Bodega Central (San José)</option>
-                                                <option value="Bodega Norte">Bodega Norte (Alajuela)</option>
+                                                {/* Zonas actualizadas */}
+                                                <option value="Chorotega">Chorotega</option>
+                                                <option value="Huetar">Huetar</option>
+                                                <option value="Brunca">Brunca</option>
+                                                <option value="Metro Este">Metro Este</option>
+                                                <option value="Metro Oeste">Metro Oeste</option>
                                             </select>
                                         </div>
                                     </div>

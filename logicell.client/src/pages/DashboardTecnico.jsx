@@ -7,11 +7,12 @@ const DashboardTecnico = () => {
     // 1. PESTAÑA ACTIVA (Inicia en historial)
     const [tabActiva, setTabActiva] = useState('historial');
 
-    // 2. MOCK DATA: CATÁLOGO DISPONIBLE
+    // 2. MOCK DATA: CATÁLOGO DISPONIBLE (ZONAS ACTUALIZADAS)
     const [catalogo] = useState([
-        { idRepuesto: 1, numeroSerial: 'RBS-TX-001', nombre: 'Transceptor RBS 6000', bodega: 'Bodega Central' },
-        { idRepuesto: 3, numeroSerial: 'CAB-FO-100', nombre: 'Bobina Fibra Óptica 100m', bodega: 'Bodega Norte' },
-        { idRepuesto: 4, numeroSerial: 'PWR-SUP-48V', nombre: 'Fuente de Poder 48V DC', bodega: 'Bodega Central' }
+        { idRepuesto: 1, numeroSerial: 'RBS-TX-001', nombre: 'Transceptor RBS 6000', bodega: 'Metro Este' },
+        { idRepuesto: 3, numeroSerial: 'CAB-FO-100', nombre: 'Bobina Fibra Óptica 100m', bodega: 'Huetar' },
+        { idRepuesto: 4, numeroSerial: 'PWR-SUP-48V', nombre: 'Fuente de Poder 48V DC', bodega: 'Metro Oeste' },
+        { idRepuesto: 5, numeroSerial: 'ANT-SEC-065', nombre: 'Antena Sectorial 65°', bodega: 'Chorotega' }
     ]);
 
     // 3. MOCK DATA: HISTORIAL DE PEDIDOS
@@ -31,6 +32,19 @@ const DashboardTecnico = () => {
     const [destino, setDestino] = useState('');
     const [descripcionImportacion, setDescripcionImportacion] = useState('');
     const [motivoImportacion, setMotivoImportacion] = useState('');
+
+    // --- NUEVO: ESTADOS DE FILTRO ---
+    const [filtroTexto, setFiltroTexto] = useState('');
+    const [filtroUbicacion, setFiltroUbicacion] = useState('');
+
+    // --- NUEVO: LÓGICA DE FILTRADO ---
+    const catalogoFiltrado = catalogo.filter(item => {
+        const coincideTexto = item.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
+            item.numeroSerial.toLowerCase().includes(filtroTexto.toLowerCase());
+        const coincideUbicacion = filtroUbicacion === '' || item.bodega === filtroUbicacion;
+
+        return coincideTexto && coincideUbicacion;
+    });
 
     // --- FUNCIONES DEL CARRITO ---
     const agregarAlCarrito = (repuesto) => {
@@ -96,7 +110,7 @@ const DashboardTecnico = () => {
                     <h2><i className="bi bi-tools text-success me-2"></i>Panel Operativo</h2>
                 </div>
 
-                {/* MENÚ DE PESTAÑAS (TABS UNIFORMADOS CON EL LOGÍSTICO) */}
+                {/* MENÚ DE PESTAÑAS */}
                 <ul className="nav nav-tabs border-secondary mb-4">
                     <li className="nav-item">
                         <button
@@ -120,7 +134,6 @@ const DashboardTecnico = () => {
                             onClick={() => setTabActiva('devoluciones')}
                         >
                             <i className="bi bi-arrow-return-left me-2"></i>Devoluciones
-                            {/* Notificación flotante idéntica a la vista logística */}
                             {equiposAsignados.filter(e => e.estado === 'Pendiente de Devolución').length > 0 && (
                                 <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
                                     {equiposAsignados.filter(e => e.estado === 'Pendiente de Devolución').length}
@@ -138,7 +151,7 @@ const DashboardTecnico = () => {
                     </li>
                 </ul>
 
-                {/* PESTAÑA: HISTORIAL */}
+                {/* PESTAÑA: MIS PEDIDOS */}
                 {tabActiva === 'historial' && (
                     <div className="card bg-secondary border-0 shadow">
                         <div className="card-header bg-dark text-light fw-bold py-3">
@@ -150,7 +163,7 @@ const DashboardTecnico = () => {
                                     <tr>
                                         <th className="px-4 py-3">ID Pedido</th>
                                         <th className="py-3">Fecha</th>
-                                        <th className="py-3">Sitio / Motivo</th>
+                                        <th className="py-3">Justificación</th>
                                         <th className="py-3">Materiales Pedidos</th>
                                         <th className="py-3 text-center">Estado</th>
                                     </tr>
@@ -173,29 +186,81 @@ const DashboardTecnico = () => {
                     </div>
                 )}
 
-                {/* PESTAÑA: NUEVA SOLICITUD (CATÁLOGO) */}
+                {/* PESTAÑA: NUEVA SOLICITUD */}
                 {tabActiva === 'nueva' && (
                     <div className="row">
                         <div className="col-lg-8 mb-4">
-                            <div className="card bg-secondary border-0 shadow h-100">
-                                <div className="card-header bg-dark text-light fw-bold py-3"><i className></i>Catálogo Disponible</div>
+                            <div className="card bg-secondary border-0 shadow">
+                                <div className="card-header bg-dark text-light fw-bold py-3 d-flex justify-content-between align-items-center">
+                                    <span><i className></i>Catálogo Disponible</span>
+                                    <span className="badge bg-info text-dark">{catalogoFiltrado.length} repuestos encontrados</span>
+                                </div>
+
+                                {/* NUEVO: BARRA DE FILTROS */}
+                                <div className="card-body bg-dark border-bottom border-secondary py-2 px-3">
+                                    <div className="row g-2">
+                                        <div className="col-md-7">
+                                            <div className="input-group input-group-sm">
+                                                <span className="input-group-text bg-secondary text-light border-dark">
+                                                    <i className="bi bi-search"></i>
+                                                </span>
+                                                <input
+                                                    type="text"
+                                                    className="form-control bg-secondary text-light border-dark"
+                                                    placeholder="Buscar por Nombre o Serial..."
+                                                    value={filtroTexto}
+                                                    onChange={(e) => setFiltroTexto(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="col-md-5">
+                                            <div className="input-group input-group-sm">
+                                                <span className="input-group-text bg-secondary text-light border-dark">
+                                                    <i className="bi bi-geo-alt-fill text-danger"></i>
+                                                </span>
+                                                <select
+                                                    className="form-select bg-secondary text-light border-dark"
+                                                    value={filtroUbicacion}
+                                                    onChange={(e) => setFiltroUbicacion(e.target.value)}
+                                                >
+                                                    {/* Opciones actualizadas con las Zonas Definitivas */}
+                                                    <option value="">Todas las ubicaciones</option>
+                                                    <option value="Chorotega">Chorotega</option>
+                                                    <option value="Huetar">Huetar</option>
+                                                    <option value="Brunca">Brunca</option>
+                                                    <option value="Metro Este">Metro Este</option>
+                                                    <option value="Metro Oeste">Metro Oeste</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="card-body p-0">
                                     <table className="table table-dark table-hover mb-0">
                                         <thead><tr><th className="px-4 py-3">Serial</th><th className="py-3">Componente</th><th className="py-3">Ubicación</th><th className="py-3 text-center">Acción</th></tr></thead>
                                         <tbody>
-                                            {catalogo.map(item => {
-                                                const enCarrito = carrito.find(c => c.idRepuesto === item.idRepuesto);
-                                                return (
-                                                    <tr key={item.idRepuesto}>
-                                                        <td className="px-4 align-middle fw-bold text-info">{item.numeroSerial}</td>
-                                                        <td className="align-middle fw-bold">{item.nombre}</td>
-                                                        <td className="align-middle text-light small"><i className="bi bi-geo-alt-fill text-danger me-1"></i>{item.bodega}</td>
-                                                        <td className="align-middle text-center">
-                                                            {enCarrito ? <button className="btn btn-sm btn-outline-secondary" disabled><i className="bi bi-check2-all me-1"></i>Seleccionado</button> : <button onClick={() => agregarAlCarrito(item)} className="btn btn-sm btn-outline-success"><i className="bi bi-cart-plus me-1"></i>Agregar</button>}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
+                                            {catalogoFiltrado.length > 0 ? (
+                                                catalogoFiltrado.map(item => {
+                                                    const enCarrito = carrito.find(c => c.idRepuesto === item.idRepuesto);
+                                                    return (
+                                                        <tr key={item.idRepuesto}>
+                                                            <td className="px-4 align-middle fw-bold text-info">{item.numeroSerial}</td>
+                                                            <td className="align-middle fw-bold">{item.nombre}</td>
+                                                            <td className="align-middle text-light small"><i className="bi bi-geo-alt-fill text-danger me-1"></i>{item.bodega}</td>
+                                                            <td className="align-middle text-center">
+                                                                {enCarrito ? <button className="btn btn-sm btn-outline-secondary" disabled><i className="bi bi-check2-all me-1"></i>Seleccionado</button> : <button onClick={() => agregarAlCarrito(item)} className="btn btn-sm btn-outline-success"><i className="bi bi-cart-plus me-1"></i>Agregar</button>}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="4" className="text-center py-4 text-muted">
+                                                        No se encontraron repuestos con esos filtros.
+                                                    </td>
+                                                </tr>
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
@@ -206,7 +271,7 @@ const DashboardTecnico = () => {
                                 <div className="card-header bg-dark text-light fw-bold py-3"><i className="bi bi-cart-check-fill text-success me-2"></i>Tu Solicitud</div>
                                 <div className="card-body d-flex flex-column">
                                     <div className="flex-grow-1 overflow-auto mb-3" style={{ maxHeight: '250px' }}>
-                                        {carrito.length === 0 ? <div className="text-center text-muted mt-4">Aún no has agregado repuestos.</div> : (
+                                        {carrito.length === 0 ? <div className="text-center text-white mt-4">Aún no has agregado repuestos.</div> : (
                                             <ul className="list-group list-group-flush">
                                                 {carrito.map(item => (
                                                     <li key={item.idRepuesto} className="list-group-item bg-dark text-light border-secondary d-flex justify-content-between align-items-center px-0">
@@ -219,7 +284,7 @@ const DashboardTecnico = () => {
                                     </div>
                                     <div className="mt-auto border-top border-secondary pt-3">
                                         <div className="mb-3">
-                                            <label className="form-label small fw-bold text-light">Observaciones:</label>
+                                            <label className="form-label small fw-bold text-light">Justificación Solicitud:</label>
                                             <input type="text" className="form-control bg-secondary text-light border-dark" value={destino} onChange={(e) => setDestino(e.target.value)} />
                                         </div>
                                         <button onClick={handleEnviarSolicitud} className="btn btn-success fw-bold w-100" disabled={carrito.length === 0}>ENVIAR SOLICITUD</button>
