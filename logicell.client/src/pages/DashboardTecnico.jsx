@@ -3,11 +3,13 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Swal from 'sweetalert2';
 
+// DashboardTecnico: panel operativo para técnicos.
+// Comentarios técnicos breves añadidos.
 const DashboardTecnico = () => {
-    // 1. PESTAÑA ACTIVA (Inicia en historial)
+    // Estado: pestaña activa (historial | nueva | devoluciones | importaciones)
     const [tabActiva, setTabActiva] = useState('historial');
 
-    // 2. MOCK DATA: CATÁLOGO DISPONIBLE (ZONAS ACTUALIZADAS)
+    // Catálogo mock (disponible en bodegas)
     const [catalogo] = useState([
         { idRepuesto: 1, numeroSerial: 'RBS-TX-001', nombre: 'Transceptor RBS 6000', bodega: 'Metro Este' },
         { idRepuesto: 3, numeroSerial: 'CAB-FO-100', nombre: 'Bobina Fibra Óptica 100m', bodega: 'Huetar' },
@@ -15,25 +17,25 @@ const DashboardTecnico = () => {
         { idRepuesto: 5, numeroSerial: 'ANT-SEC-065', nombre: 'Antena Sectorial 65°', bodega: 'Chorotega' }
     ]);
 
-    // 3. MOCK DATA: HISTORIAL DE PEDIDOS
+    // Historial mock de pedidos del técnico
     const [historial] = useState([
         { idSolicitud: 101, fecha: '10/06/2026', sitioMotivo: 'BTS-SJ-045 (Falla de Tx)', materiales: '1x Transceptor RBS 6000', estado: 'Pendiente' },
         { idSolicitud: 102, fecha: '09/06/2026', sitioMotivo: 'RBS-A-102 (Ampliación)', materiales: '2x Bobina Fibra Óptica 100m', estado: 'Aprobado' }
     ]);
 
-    // 4. MOCK DATA: EQUIPOS ASIGNADOS (Para RF6 - Devoluciones)
+    // Equipos asignados al técnico (para devoluciones)
     const [equiposAsignados, setEquiposAsignados] = useState([
         { idAsignacion: 1, numeroSerial: 'ANT-OLD-99', nombre: 'Antena Sectorial Dañada', fechaPrestamo: '01/06/2026', fechaDevolucion: '15/06/2026', estado: 'Pendiente de Devolución' },
         { idAsignacion: 2, numeroSerial: 'RBS-TX-002', nombre: 'Transceptor Temporal', fechaPrestamo: '05/06/2026', fechaDevolucion: '20/06/2026', estado: 'En uso' }
     ]);
 
-    // 5. ESTADOS PARA FORMULARIOS
+    // Estados de formularios y selección
     const [carrito, setCarrito] = useState([]);
     const [destino, setDestino] = useState('');
     const [descripcionImportacion, setDescripcionImportacion] = useState('');
     const [motivoImportacion, setMotivoImportacion] = useState('');
 
-    // --- NUEVO: ESTADOS DE FILTRO ---
+    // Estados de filtros para catálogo
     const [filtroTexto, setFiltroTexto] = useState('');
     const [filtroUbicacion, setFiltroUbicacion] = useState('');
 
@@ -46,7 +48,7 @@ const DashboardTecnico = () => {
         return coincideTexto && coincideUbicacion;
     });
 
-    // --- FUNCIONES DEL CARRITO ---
+    // Funciones de carrito: agregar / quitar
     const agregarAlCarrito = (repuesto) => {
         if (!carrito.find(item => item.idRepuesto === repuesto.idRepuesto)) setCarrito([...carrito, repuesto]);
     };
@@ -55,6 +57,7 @@ const DashboardTecnico = () => {
         setCarrito(carrito.filter(item => item.idRepuesto !== idRepuesto));
     };
 
+    // Enviar solicitud: valida y notifica (mock)
     const handleEnviarSolicitud = () => {
         if (carrito.length === 0 || destino.trim() === '') {
             Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Selecciona un repuesto y escribe el destino.', background: '#212529', color: '#fff' });
@@ -66,7 +69,7 @@ const DashboardTecnico = () => {
         setTabActiva('historial');
     };
 
-    // --- FUNCIONES DE DEVOLUCIÓN (RF6) ---
+    // Solicitud de devolución: confirmación y cambio de estado (mock)
     const handleSolicitarDevolucion = async (idAsignacion) => {
         const confirmacion = await Swal.fire({
             title: '¿Generar solicitud de devolución?',
@@ -87,7 +90,7 @@ const DashboardTecnico = () => {
         }
     };
 
-    // --- FUNCIONES DE IMPORTACIÓN (RF5) ---
+    // Solicitud de importación: envía formulario (mock)
     const handleSolicitarImportacion = (e) => {
         e.preventDefault();
         Swal.fire({

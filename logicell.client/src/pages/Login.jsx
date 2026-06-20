@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 
+// Login: formulario de autenticación.
+// Comentarios técnicos breves añadidos.
 const Login = () => {
+    // Estados: campos del formulario
     const [correo, setCorreo] = useState('');
     const [contrasena, setContrasena] = useState('');
     const navigate = useNavigate();
 
+    // Enviar credenciales al API y redirigir según rol (mock de flujo)
     const handleLogin = async (e) => {
         e.preventDefault();
 
@@ -32,14 +36,14 @@ const Login = () => {
                     confirmButtonColor: '#198754'
                 });
 
-                // Redirigimos según el rol que tenga en la base de datos
+                // Redirigir según rol
                 if (rolUsuario === 'Tecnico') navigate('/tecnico');
                 else if (rolUsuario === 'Logistico') navigate('/logistico');
                 else if (rolUsuario === 'Admin') navigate('/admin');
                 else navigate('/');
             }
         } catch (error) {
-            // Si hay error (ej. contraseña incorrecta)
+            // Error de autenticación
             Swal.fire({
                 icon: 'error',
                 title: 'Acceso Denegado',

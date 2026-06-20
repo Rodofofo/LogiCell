@@ -21,11 +21,16 @@ namespace LogiCell.Server.Controllers
         {
             var usuarios = await _context.Usuarios
                 .Include(u => u.IdRolNavigation)
+                .Include(u => u.InformacionPersonal) // Unimos la tabla de Información Personal
                 .Select(u => new {
                     u.IdUsuario,
                     u.CorreoElectronico,
                     Rol = u.IdRolNavigation.NombreRol,
-                    u.EstadoActivo
+                    u.EstadoActivo,
+                    // Extraemos los datos personales (manejando nulos por seguridad)
+                    NombreCompleto = u.InformacionPersonal != null ? u.InformacionPersonal.NombreCompleto : "Sin nombre",
+                    Telefono = u.InformacionPersonal != null ? u.InformacionPersonal.Telefono : "",
+                    NumeroEmpleado = u.InformacionPersonal != null ? u.InformacionPersonal.NumeroEmpleado : ""
                 })
                 .ToListAsync();
 
@@ -36,21 +41,39 @@ namespace LogiCell.Server.Controllers
         [HttpPost]
         public async Task<IActionResult> CrearUsuario([FromBody] CreateUsuarioRequest request)
         {
+            // Validar si el correo ya existe
             var existeCorreo = await _context.Usuarios.AnyAsync(u => u.CorreoElectronico == request.CorreoElectronico);
             if (existeCorreo) return BadRequest(new { mensaje = "El correo ya está registrado." });
 
+            // Buscar el IdRol basado en el nombre enviado desde React ("Técnico", "Logístico", etc.)
+            var rolDb = await _context.Roles.FirstOrDefaultAsync(r => r.NombreRol == request.Rol);
+            if (rolDb == null) return BadRequest(new { mensaje = "El rol especificado no es válido." });
+
+            // Paso 1: Crear y guardar el Usuario
             var nuevoUsuario = new Usuario
             {
                 CorreoElectronico = request.CorreoElectronico,
-                ContrasenaHash = request.Contrasena,
-                IdRol = request.IdRol,
+                ContrasenaHash = request.Contrasena, // Nota: En el futuro deberías encriptar esto (Ej. BCrypt)
+                IdRol = rolDb.IdRol,
                 EstadoActivo = true
             };
 
             _context.Usuarios.Add(nuevoUsuario);
+            await _context.SaveChangesAsync(); // Se guarda para que SQL genere el IdUsuario
+
+            // Paso 2: Crear y guardar la Información Personal vinculada al IdUsuario recién generado
+            var nuevaInfo = new InformacionPersonal
+            {
+                IdUsuario = nuevoUsuario.IdUsuario,
+                NombreCompleto = request.NombreCompleto,
+                Telefono = request.Telefono,
+                NumeroEmpleado = request.NumeroEmpleado
+            };
+
+            _context.InformacionPersonals.Add(nuevaInfo);
             await _context.SaveChangesAsync();
 
-            return Ok(new { mensaje = "Usuario creado exitosamente" });
+            return Ok(new { mensaje = "Usuario y datos personales creados exitosamente." });
         }
 
         // 3. UPDATE: Editar usuario
@@ -64,13 +87,39 @@ namespace LogiCell.Server.Controllers
             var existeCorreo = await _context.Usuarios.AnyAsync(u => u.CorreoElectronico == request.CorreoElectronico && u.IdUsuario != id);
             if (existeCorreo) return BadRequest(new { mensaje = "El correo ya está en uso por otro colaborador." });
 
+            // Actualizar Rol si cambió
+            var rolDb = await _context.Roles.FirstOrDefaultAsync(r => r.NombreRol == request.Rol);
+            if (rolDb != null)
+            {
+                usuario.IdRol = rolDb.IdRol;
+            }
+
             usuario.CorreoElectronico = request.CorreoElectronico;
-            usuario.IdRol = request.IdRol;
 
             // Solo actualizamos la contraseña si el admin escribió una nueva
             if (!string.IsNullOrWhiteSpace(request.Contrasena))
             {
                 usuario.ContrasenaHash = request.Contrasena;
+            }
+
+            // Actualizar la Información Personal
+            var infoPersonal = await _context.InformacionPersonals.FirstOrDefaultAsync(i => i.IdUsuario == id);
+            if (infoPersonal != null)
+            {
+                infoPersonal.NombreCompleto = request.NombreCompleto;
+                infoPersonal.Telefono = request.Telefono;
+                infoPersonal.NumeroEmpleado = request.NumeroEmpleado;
+            }
+            else
+            {
+                // Por si acaso se creó un usuario manual en SQL que no tenía Información Personal
+                _context.InformacionPersonals.Add(new InformacionPersonal
+                {
+                    IdUsuario = id,
+                    NombreCompleto = request.NombreCompleto,
+                    Telefono = request.Telefono,
+                    NumeroEmpleado = request.NumeroEmpleado
+                });
             }
 
             await _context.SaveChangesAsync();
@@ -95,18 +144,24 @@ namespace LogiCell.Server.Controllers
         }
     }
 
-    // --- CLASES AUXILIARES (DTOs) ---
+    // --- CLASES AUXILIARES (DTOs) AMPLIADAS ---
     public class CreateUsuarioRequest
     {
         public string CorreoElectronico { get; set; } = null!;
         public string Contrasena { get; set; } = null!;
-        public int IdRol { get; set; }
+        public string Rol { get; set; } = null!; // Se cambia a string ("Técnico", "Administrador")
+        public string NombreCompleto { get; set; } = null!;
+        public string? Telefono { get; set; }
+        public string? NumeroEmpleado { get; set; }
     }
 
     public class EditUsuarioRequest
     {
         public string CorreoElectronico { get; set; } = null!;
         public string? Contrasena { get; set; } // Es opcional
-        public int IdRol { get; set; }
+        public string Rol { get; set; } = null!;
+        public string NombreCompleto { get; set; } = null!;
+        public string? Telefono { get; set; }
+        public string? NumeroEmpleado { get; set; }
     }
 }

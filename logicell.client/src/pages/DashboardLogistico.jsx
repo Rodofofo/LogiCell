@@ -3,8 +3,10 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Swal from 'sweetalert2';
 
+// DashboardLogistico: vista del módulo logístico.
+// Comentarios técnicos generales añadidos (breves) para facilitar mantenimiento.
 const DashboardLogistico = () => {
-    // 1. PESTAÑA ACTIVA (Inicia en solicitudes por preferencia de UX)
+    // Estado: pestaña activa ('solicitudes' | 'inventario')
     const [tabActiva, setTabActiva] = useState('solicitudes');
 
     // 2. MOCK DATA: INVENTARIO DE REPUESTOS (Ubicaciones actualizadas)
@@ -48,25 +50,27 @@ const DashboardLogistico = () => {
         }
     ]);
 
-    // 4. ESTADOS PARA EL MODAL DE CREACIÓN/EDICIÓN DE REPUESTOS
+    // Estados para modal de repuestos (crear/editar)
     const [mostrarModal, setMostrarModal] = useState(false);
     const [modoEdicion, setModoEdicion] = useState(false);
     const [idEdicion, setIdEdicion] = useState(null);
     const [serial, setSerial] = useState('');
     const [nombre, setNombre] = useState('');
     const [descripcion, setDescripcion] = useState('');
-    const [bodega, setBodega] = useState('Metro Este'); // Actualizado al valor por defecto nuevo
+    const [bodega, setBodega] = useState('Metro Este');
 
     // --- FUNCIONES DEL INVENTARIO ---
+    // Abrir modal en modo creación: limpiar campos
     const abrirModalCrear = () => {
         setModoEdicion(false);
         setSerial('');
         setNombre('');
         setDescripcion('');
-        setBodega('Metro Este'); // Actualizado al valor por defecto nuevo
+        setBodega('Metro Este');
         setMostrarModal(true);
     };
 
+    // Abrir modal en modo edición: cargar item a editar
     const abrirModalEditar = (item) => {
         setModoEdicion(true);
         setIdEdicion(item.idRepuesto);
@@ -77,6 +81,7 @@ const DashboardLogistico = () => {
         setMostrarModal(true);
     };
 
+    // Guardar repuesto: crea o actualiza según modoEdicion
     const handleSubmitRepuesto = (e) => {
         e.preventDefault();
         if (modoEdicion) {
@@ -90,6 +95,7 @@ const DashboardLogistico = () => {
         setMostrarModal(false);
     };
 
+    // Marcar repuesto como dado de baja (no elimina, solo cambia estado)
     const handleDarDeBaja = async (idRepuesto) => {
         const confirmacion = await Swal.fire({
             title: '¿Dar de baja este componente?',
@@ -107,9 +113,10 @@ const DashboardLogistico = () => {
     };
 
     // --- FUNCIONES DE LA BANDEJA DE SOLICITUDES (CON RECHAZO CON MOTIVO RF10) ---
+    // Procesar solicitud: aprobar o rechazar (rechazo requiere motivo)
     const handleProcesarSolicitud = async (idSolicitud, nuevoEstado) => {
         if (nuevoEstado === 'Rechazado') {
-            // Cumplimiento del RF10: Ventana interactiva para capturar el motivo de rechazo
+            // Pedir motivo antes de rechazar (cumple RF10)
             const { value: motivo } = await Swal.fire({
                 title: 'Rechazar Solicitud',
                 text: 'Por favor, ingrese el motivo del rechazo para notificar al técnico:',
@@ -137,7 +144,7 @@ const DashboardLogistico = () => {
                 Swal.fire({ icon: 'error', title: 'Solicitud Rechazada', text: 'Se registró el motivo y se liberó el flujo.', background: '#212529', color: '#fff', timer: 2000, showConfirmButton: false });
             }
         } else {
-            // Aprobación normal (Despacho, Devolución o Importación)
+            // Confirmar aprobación antes de cambiar estado
             const confirmacion = await Swal.fire({
                 title: '¿Aprobar esta transacción?',
                 text: `La solicitud cambiará al estado de ${nuevoEstado}.`,
