@@ -1,33 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Swal from 'sweetalert2';
+import { usuariosService } from '../services/api'; // Importamos el servicio real
 
 const DashboardAdministrativo = () => {
-    // 1. PESTAÑA ACTIVA
     const [tabActiva, setTabActiva] = useState('usuarios');
 
-    // 2. MOCK DATA: Combinación de 'Usuarios' e 'InformacionPersonal' de tu BD
-    const [usuarios, setUsuarios] = useState([
-        { idUsuario: 1, correo: 'admin@logicell.com', rol: 'Administrador', estadoActivo: true, nombreCompleto: 'Admin Principal', telefono: '8888-0000', numeroEmpleado: 'ADM-001' },
-        { idUsuario: 2, correo: 'juan.tecnico@logicell.com', rol: 'Técnico', estadoActivo: true, nombreCompleto: 'Juan Pérez', telefono: '8888-1111', numeroEmpleado: 'TEC-045' },
-        { idUsuario: 3, correo: 'maria.logistica@logicell.com', rol: 'Logístico', estadoActivo: false, nombreCompleto: 'María Gómez', telefono: '8888-2222', numeroEmpleado: 'LOG-012' }
-    ]);
+    // 1. EL ESTADO INICIA VACÍO, SE LLENARÁ DESDE LA BASE DE DATOS
+    const [usuarios, setUsuarios] = useState([]);
 
-    // 3. ESTADOS PARA EL MODAL DE CREACIÓN/EDICIÓN
     const [mostrarModal, setMostrarModal] = useState(false);
     const [modoEdicion, setModoEdicion] = useState(false);
     const [idEdicion, setIdEdicion] = useState(null);
 
-    // Campos del formulario
     const [nombreCompleto, setNombreCompleto] = useState('');
     const [correo, setCorreo] = useState('');
     const [telefono, setTelefono] = useState('');
     const [numeroEmpleado, setNumeroEmpleado] = useState('');
     const [rol, setRol] = useState('Técnico');
-    const [password, setPassword] = useState(''); // Solo se exige al crear
+    const [password, setPassword] = useState('');
 
-    // --- FUNCIONES DEL CRUD DE USUARIOS ---
+    // --- NUEVO: FUNCIÓN PARA CARGAR DATOS DESDE C# ---
+    const cargarUsuarios = async () => {
+        try {
+            const data = await usuariosService.obtenerTodos();
+            setUsuarios(data);
+        } catch (error) {
+            console.error("Error al cargar usuarios:", error);
+            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo cargar la lista de personal.' });
+        }
+    };
+
+    // Al abrir la pantalla, dispara la carga de datos
+    useEffect(() => {
+        cargarUsuarios();
+    }, []);
+
     const abrirModalCrear = () => {
         setModoEdicion(false);
         setNombreCompleto('');
@@ -43,7 +52,7 @@ const DashboardAdministrativo = () => {
         setModoEdicion(true);
         setIdEdicion(user.idUsuario);
         setNombreCompleto(user.nombreCompleto);
-        setCorreo(user.correo);
+        setCorreo(user.correoElectronico); // Ajustado al nombre que devuelve el GET de C#
         setTelefono(user.telefono || '');
         setNumeroEmpleado(user.numeroEmpleado || '');
         setRol(user.rol);
@@ -51,28 +60,53 @@ const DashboardAdministrativo = () => {
         setMostrarModal(true);
     };
 
-    const handleSubmitUsuario = (e) => {
+    // --- CONECTADO AL SERVICIO DE CREAR/EDITAR ---
+    const handleSubmitUsuario = async (e) => {
         e.preventDefault();
 
-        if (modoEdicion) {
-            setUsuarios(usuarios.map(u => u.idUsuario === idEdicion ? {
-                ...u, nombreCompleto, correo, telefono, numeroEmpleado, rol
-            } : u));
-            Swal.fire({ icon: 'success', title: 'Usuario Actualizado', text: 'Los datos del colaborador han sido modificados.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
-        } else {
-            if (password.trim() === '') {
-                Swal.fire({ icon: 'warning', title: 'Contraseña requerida', text: 'Debes asignar una contraseña inicial al nuevo usuario.', background: '#212529', color: '#fff' });
-                return;
+        // Armamos el paquete EXACTAMENTE con los nombres que pide tu DTO en C#
+        const payload = {
+            correoElectronico: correo,
+            rol: rol,
+            nombreCompleto: nombreCompleto,
+            telefono: telefono,
+            numeroEmpleado: numeroEmpleado
+        };
+
+        try {
+            if (modoEdicion) {
+                // Si escribieron algo en el campo de contraseña, lo incluimos para editar
+                if (password.trim() !== '') {
+                    payload.contrasena = password;
+                }
+
+                await usuariosService.editar(idEdicion, payload);
+                Swal.fire({ icon: 'success', title: 'Usuario Actualizado', text: 'Los datos del colaborador han sido modificados.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+            } else {
+                if (password.trim() === '') {
+                    Swal.fire({ icon: 'warning', title: 'Contraseña requerida', text: 'Debes asignar una contraseña inicial al nuevo usuario.', background: '#212529', color: '#fff' });
+                    return;
+                }
+                payload.contrasena = password; // Agregamos la clave al crear
+
+                await usuariosService.crear(payload);
+                Swal.fire({ icon: 'success', title: 'Usuario Creado', text: 'El nuevo colaborador ya tiene acceso al sistema.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
             }
-            const nuevo = {
-                idUsuario: Date.now(), correo, rol, estadoActivo: true, nombreCompleto, telefono, numeroEmpleado
-            };
-            setUsuarios([...usuarios, nuevo]);
-            Swal.fire({ icon: 'success', title: 'Usuario Creado', text: 'El nuevo colaborador ya tiene acceso al sistema.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+
+            setMostrarModal(false);
+            cargarUsuarios(); // Recargamos la tabla para ver los cambios de BD
+
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error.response?.data?.mensaje || 'Hubo un problema al procesar la solicitud.',
+                background: '#212529', color: '#fff'
+            });
         }
-        setMostrarModal(false);
     };
 
+    // --- CONECTADO AL SERVICIO DE ACTIVAR/DESACTIVAR ---
     const handleToggleEstado = async (idUsuario, estadoActual) => {
         const accion = estadoActual ? 'desactivar' : 'activar';
         const confirmacion = await Swal.fire({
@@ -87,8 +121,13 @@ const DashboardAdministrativo = () => {
         });
 
         if (confirmacion.isConfirmed) {
-            setUsuarios(usuarios.map(u => u.idUsuario === idUsuario ? { ...u, estadoActivo: !estadoActual } : u));
-            Swal.fire({ icon: 'success', title: 'Estado Actualizado', text: `El usuario ha sido ${estadoActual ? 'desactivado' : 'activado'}.`, background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+            try {
+                await usuariosService.toggleEstado(idUsuario);
+                Swal.fire({ icon: 'success', title: 'Estado Actualizado', text: `El usuario ha sido ${estadoActual ? 'desactivado' : 'activado'}.`, background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+                cargarUsuarios(); // Refrescar para ver el cambio de estado
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo cambiar el estado del usuario.' });
+            }
         }
     };
 
@@ -101,7 +140,6 @@ const DashboardAdministrativo = () => {
                     <h2><i className="bi bi-shield-lock-fill text-primary me-2"></i>Panel de Administración</h2>
                 </div>
 
-                {/* MENÚ DE PESTAÑAS (Configuración eliminada) */}
                 <ul className="nav nav-tabs border-secondary mb-4">
                     <li className="nav-item">
                         <button
@@ -113,11 +151,10 @@ const DashboardAdministrativo = () => {
                     </li>
                 </ul>
 
-                {/* CONTENIDO PESTAÑA: GESTIÓN DE PERSONAL */}
                 {tabActiva === 'usuarios' && (
                     <div>
                         <div className="d-flex justify-content-end mb-3">
-                            <button onClick={abrirModalCrear} className="btn btn-primary fw-bold shadow-sm">
+                            <button onClick={abrirModalCrear} className="btn btn-success fw-bold shadow-sm">
                                 <i className="bi bi-person-plus-fill me-2"></i>NUEVO COLABORADOR
                             </button>
                         </div>
@@ -130,50 +167,51 @@ const DashboardAdministrativo = () => {
                                             <th className="py-3">Nombre Completo</th>
                                             <th className="py-3">Contacto</th>
                                             <th className="py-3">Rol / Perfil</th>
-                                            <th className="py-3 text-center">Acceso</th>
+                                            <th className="py-3 text-center">Estado</th>
                                             <th className="py-3 text-center">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {usuarios.map((user) => (
-                                            /* Se eliminó la clase opacity-50 */
-                                            <tr key={user.idUsuario}>
-                                                <td className="px-4 align-middle fw-bold text-info">{user.numeroEmpleado || 'N/A'}</td>
-                                                <td className="align-middle fw-bold">{user.nombreCompleto}</td>
-                                                <td className="align-middle small">
-                                                    <div className="text-light"><i className="bi bi-envelope-fill text-white-50 me-1"></i>{user.correo}</div>
-                                                    <div className="text-light mt-1"><i className="bi bi-telephone-fill text-white-50 me-1"></i>{user.telefono || 'Sin registrar'}</div>
-                                                </td>
-                                                <td className="align-middle">
-                                                    <span className={`badge ${user.rol === 'Administrador' ? 'bg-primary' :
-                                                            user.rol === 'Logístico' ? 'bg-warning text-dark' : 'bg-success'
-                                                        }`}>
-                                                        {user.rol}
-                                                    </span>
-                                                </td>
-                                                <td className="align-middle text-center">
-                                                    <span className={`badge ${user.estadoActivo ? 'bg-success' : 'bg-danger'}`}>
-                                                        {user.estadoActivo ? 'Activo' : 'Desactivado'}
-                                                    </span>
-                                                </td>
-                                                <td className="align-middle text-center">
-                                                    <button
-                                                        onClick={() => abrirModalEditar(user)}
-                                                        className="btn btn-sm btn-outline-info me-2"
-                                                        title="Editar Datos"
-                                                    >
-                                                        <i className="bi bi-pencil-square"></i>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleToggleEstado(user.idUsuario, user.estadoActivo)}
-                                                        className={`btn btn-sm ${user.estadoActivo ? 'btn-outline-danger' : 'btn-outline-success'}`}
-                                                        title={user.estadoActivo ? 'Desactivar Usuario' : 'Reactivar Usuario'}
-                                                    >
-                                                        <i className={`bi ${user.estadoActivo ? 'bi-person-fill-slash' : 'bi-person-check-fill'}`}></i>
-                                                    </button>
-                                                </td>
+                                        {usuarios.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="6" className="text-center py-4 text-white-50">Cargando usuarios desde la base de datos...</td>
                                             </tr>
-                                        ))}
+                                        ) : (
+                                            usuarios.map((user) => (
+                                                <tr key={user.idUsuario}>
+                                                    <td className="px-4 align-middle fw-bold text-info">{user.numeroEmpleado || 'N/A'}</td>
+                                                    <td className="align-middle fw-bold">{user.nombreCompleto}</td>
+                                                    <td className="align-middle small">
+                                                        <div className="text-light"><i className="bi bi-envelope-fill text-white-50 me-1"></i>{user.correoElectronico}</div>
+                                                        <div className="text-light mt-1"><i className="bi bi-telephone-fill text-white-50 me-1"></i>{user.telefono || 'Sin registrar'}</div>
+                                                    </td>
+                                                    <td className="align-middle text-white">
+                                                        {user.rol}
+                                                    </td>
+                                                    <td className="align-middle text-center">
+                                                        <span className={`badge ${user.estadoActivo ? 'bg-success' : 'bg-danger'}`}>
+                                                            {user.estadoActivo ? 'Activo' : 'Desactivado'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="align-middle text-center">
+                                                        <button
+                                                            onClick={() => abrirModalEditar(user)}
+                                                            className="btn btn-sm btn-outline-info me-2"
+                                                            title="Editar Datos"
+                                                        >
+                                                            <i className="bi bi-pencil-square"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleToggleEstado(user.idUsuario, user.estadoActivo)}
+                                                            className={`btn btn-sm ${user.estadoActivo ? 'btn-outline-danger' : 'btn-outline-success'}`}
+                                                            title={user.estadoActivo ? 'Desactivar Usuario' : 'Reactivar Usuario'}
+                                                        >
+                                                            <i className={`bi ${user.estadoActivo ? 'bi-person-fill-slash' : 'bi-person-check-fill'}`}></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
@@ -184,7 +222,6 @@ const DashboardAdministrativo = () => {
 
             <Footer />
 
-            {/* MODAL DE GESTIÓN DE USUARIOS */}
             {mostrarModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}>
                     <div className="modal-dialog modal-dialog-centered modal-lg">
@@ -198,7 +235,7 @@ const DashboardAdministrativo = () => {
                             </div>
                             <form onSubmit={handleSubmitUsuario}>
                                 <div className="modal-body">
-                                    <h6 className="text-primary border-bottom border-secondary pb-2 mb-3"><i className="bi bi-card-heading me-2"></i>Información Personal</h6>
+                                    <h6 className="text-primary border-bottom border-secondary pb-2 mb-3"><i className></i>Información Personal</h6>
                                     <div className="row">
                                         <div className="col-md-8 mb-3">
                                             <label className="form-label small fw-bold">Nombre Completo</label>
@@ -214,7 +251,7 @@ const DashboardAdministrativo = () => {
                                         <input type="text" className="form-control bg-secondary text-light border-dark" placeholder="Ej. 8888-8888" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
                                     </div>
 
-                                    <h6 className="text-primary border-bottom border-secondary pb-2 mb-3"><i className="bi bi-shield-lock me-2"></i>Credenciales de Acceso</h6>
+                                    <h6 className="text-primary border-bottom border-secondary pb-2 mb-3"><i className></i>Credenciales de Acceso</h6>
                                     <div className="row">
                                         <div className="col-md-6 mb-3">
                                             <label className="form-label small fw-bold">Correo Electrónico</label>
@@ -229,17 +266,17 @@ const DashboardAdministrativo = () => {
                                             </select>
                                         </div>
                                     </div>
-                                    {!modoEdicion && (
-                                        <div className="mb-3">
-                                            <label className="form-label small fw-bold">Contraseña Temporal</label>
-                                            <input type="password" className="form-control bg-secondary text-light border-dark" placeholder="Asigna una clave inicial..." value={password} onChange={(e) => setPassword(e.target.value)} />
-                                            <div className="form-text text-white-50">El colaborador usará esta contraseña para su primer inicio de sesión.</div>
-                                        </div>
-                                    )}
+                                    <div className="mb-3">
+                                        <label className="form-label small fw-bold">
+                                            {modoEdicion ? 'Nueva Contraseña (Opcional)' : 'Contraseña Temporal'}
+                                        </label>
+                                        <input type="password" className="form-control bg-secondary text-light border-dark" placeholder={modoEdicion ? "Dejar en blanco para no cambiar..." : "Asigna una clave inicial..."} value={password} onChange={(e) => setPassword(e.target.value)} />
+                                        {!modoEdicion && <div className="form-text text-white-50">El colaborador usará esta contraseña para su primer inicio de sesión.</div>}
+                                    </div>
                                 </div>
                                 <div className="modal-footer border-secondary">
                                     <button type="button" className="btn btn-outline-light" onClick={() => setMostrarModal(false)}>Cancelar</button>
-                                    <button type="submit" className={`btn ${modoEdicion ? 'btn-info' : 'btn-primary'} fw-bold`}>
+                                    <button type="submit" className={`btn ${modoEdicion ? 'btn-info' : 'btn-success'} fw-bold`}>
                                         {modoEdicion ? 'Guardar Cambios' : 'Registrar Colaborador'}
                                     </button>
                                 </div>
