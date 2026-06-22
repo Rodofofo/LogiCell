@@ -1,6 +1,9 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
+// App.jsx - Router principal
+// Define rutas públicas y protegidas. El guardian `ProtectedRoute` valida rol y sesión.
+
 // Importacion de las paginas
 import Login from './pages/Login';
 import DashboardTecnico from './pages/DashboardTecnico';

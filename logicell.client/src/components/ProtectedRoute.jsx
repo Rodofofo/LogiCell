@@ -1,6 +1,8 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 
+// ProtectedRoute: componente guardian de rutas por rol.
+// Breve: verifica existencia de sesión (localStorage) y que el rol tenga permiso.
 const ProtectedRoute = ({ children, rolPermitido }) => {
     // Leemos el rol actual guardado en la memoria
     const userRol = localStorage.getItem('userRol');

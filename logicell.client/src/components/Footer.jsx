@@ -1,3 +1,5 @@
+// Footer: componente de pie de página reutilizable.
+// Comentario técnico breve: muestra año actual y estado general del sistema.
 const Footer = () => {
     const anioActual = new Date().getFullYear();
 

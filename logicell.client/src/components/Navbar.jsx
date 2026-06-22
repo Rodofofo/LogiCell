@@ -1,6 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
+// Navbar: cabecera global que muestra usuario y logout.
+// Comentario técnico breve: usa localStorage para leer rol y correo, y redirige al logout.
 const Navbar = () => {
     const navigate = useNavigate();
 

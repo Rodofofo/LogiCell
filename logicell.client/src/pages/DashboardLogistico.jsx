@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Swal from 'sweetalert2';
+import { repuestosService } from '../services/api';
 
 // DashboardLogistico: vista del módulo logístico.
 // Comentarios técnicos generales añadidos (breves) para facilitar mantenimiento.
@@ -9,12 +10,23 @@ const DashboardLogistico = () => {
     // Estado: pestaña activa ('solicitudes' | 'inventario')
     const [tabActiva, setTabActiva] = useState('solicitudes');
 
-    // 2. MOCK DATA: INVENTARIO DE REPUESTOS (Ubicaciones actualizadas)
-    const [repuestos, setRepuestos] = useState([
-        { idRepuesto: 1, numeroSerial: 'RBS-TX-001', nombre: 'Transceptor RBS 6000', descripcion: 'Módulo de radiofrecuencia principal', bodega: 'Metro Este', estadoOperativo: 'Disponible' },
-        { idRepuesto: 2, numeroSerial: 'BTS-ANT-045', nombre: 'Antena Sectorial 65°', descripcion: 'Antena para panel BTS', bodega: 'Metro Este', estadoOperativo: 'Reservado' },
-        { idRepuesto: 3, numeroSerial: 'CAB-FO-100', nombre: 'Bobina Fibra Óptica 100m', descripcion: 'Cable monomodo para conexiones de sitio', bodega: 'Huetar', estadoOperativo: 'Disponible' }
-    ]);
+    // Inicia vacío, se llenará desde SQL Server
+    const [repuestos, setRepuestos] = useState([]);
+
+    // Cargar repuestos reales al abrir la pantalla
+    const cargarRepuestos = async () => {
+        try {
+            const data = await repuestosService.obtenerTodos();
+            setRepuestos(data);
+        } catch (error) {
+            console.error("Error al cargar repuestos:", error);
+            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo cargar el inventario.' });
+        }
+    };
+
+    useEffect(() => {
+        cargarRepuestos();
+    }, []);
 
     // 3. MOCK DATA: BANDEJA DE SOLICITUDES AMPLIADA (Tipos de solicitud mapeados con la BD)
     const [solicitudes, setSolicitudes] = useState([
@@ -82,17 +94,34 @@ const DashboardLogistico = () => {
     };
 
     // Guardar repuesto: crea o actualiza según modoEdicion
-    const handleSubmitRepuesto = (e) => {
+    const handleSubmitRepuesto = async (e) => {
         e.preventDefault();
-        if (modoEdicion) {
-            setRepuestos(repuestos.map(rep => rep.idRepuesto === idEdicion ? { ...rep, numeroSerial: serial, nombre: nombre, descripcion: descripcion, bodega: bodega } : rep));
-            Swal.fire({ icon: 'success', title: 'Actualizado', text: 'Componente modificado.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
-        } else {
-            const nuevo = { idRepuesto: Date.now(), numeroSerial: serial, nombre: nombre, descripcion: descripcion, bodega: bodega, estadoOperativo: 'Disponible' };
-            setRepuestos([...repuestos, nuevo]);
-            Swal.fire({ icon: 'success', title: 'Registrado', text: 'Componente ingresado al inventario.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+
+        const payload = {
+            numeroSerial: serial,
+            nombre: nombre,
+            descripcion: descripcion,
+            bodega: bodega
+        };
+
+        try {
+            if (modoEdicion) {
+                await repuestosService.editar(idEdicion, payload);
+                Swal.fire({ icon: 'success', title: 'Actualizado', text: 'Componente modificado.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+            } else {
+                await repuestosService.crear(payload);
+                Swal.fire({ icon: 'success', title: 'Registrado', text: 'Componente ingresado al inventario.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+            }
+            setMostrarModal(false);
+            cargarRepuestos(); // Recarga la tabla para ver los cambios de la BD
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error.response?.data?.mensaje || 'Hubo un problema al procesar la solicitud.',
+                background: '#212529', color: '#fff'
+            });
         }
-        setMostrarModal(false);
     };
 
     // Marcar repuesto como dado de baja (no elimina, solo cambia estado)
@@ -106,9 +135,15 @@ const DashboardLogistico = () => {
             confirmButtonText: 'Sí, dar de baja',
             background: '#212529', color: '#fff'
         });
+
         if (confirmacion.isConfirmed) {
-            setRepuestos(repuestos.map(rep => rep.idRepuesto === idRepuesto ? { ...rep, estadoOperativo: 'Dado de baja' } : rep));
-            Swal.fire({ icon: 'success', title: 'Completado', text: 'Estado actualizado.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+            try {
+                await repuestosService.darDeBaja(idRepuesto);
+                Swal.fire({ icon: 'success', title: 'Completado', text: 'Estado actualizado.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+                cargarRepuestos(); // Refresca la lista
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo dar de baja el componente.' });
+            }
         }
     };
 
