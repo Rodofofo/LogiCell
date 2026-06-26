@@ -1,6 +1,3 @@
-/* index.css
-   Estilos globales mínimos del proyecto.
-   Comentario técnico breve: establece altura completa y fondo consistente con tema oscuro. */
 html, body, #root {
     height: 100%;
     margin: 0;

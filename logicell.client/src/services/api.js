@@ -1,8 +1,3 @@
-// api.js
-// Servicio centralizado para llamadas HTTP hacia la API backend.
-// Contiene módulos pequeños (auth, usuarios, repuestos) que usan la misma instancia axios.
-// Comentarios técnicos breves: cada método retorna response.data cuando aplica.
-
 import axios from 'axios';
 
 // 1. CONFIGURACIÓN BASE
