@@ -18,7 +18,7 @@ const DashboardAdministrativo = () => {
     const [correo, setCorreo] = useState('');
     const [telefono, setTelefono] = useState('');
     const [numeroEmpleado, setNumeroEmpleado] = useState('');
-    const [rol, setRol] = useState('Técnico');
+    const [rol, setRol] = useState('Tecnico');
     const [password, setPassword] = useState('');
 
     // --- NUEVO: FUNCIÓN PARA CARGAR DATOS DESDE C# ---
@@ -43,7 +43,7 @@ const DashboardAdministrativo = () => {
         setCorreo('');
         setTelefono('');
         setNumeroEmpleado('');
-        setRol('Técnico');
+        setRol('Tecnico');
         setPassword('');
         setMostrarModal(true);
     };
@@ -261,8 +261,8 @@ const DashboardAdministrativo = () => {
                                             <label className="form-label small fw-bold">Rol en el Sistema</label>
                                             <select className="form-select bg-secondary text-light border-dark" value={rol} onChange={(e) => setRol(e.target.value)}>
                                                 <option value="Administrador">Administrador</option>
-                                                <option value="Técnico">Técnico de Campo</option>
-                                                <option value="Logístico">Especialista Logístico</option>
+                                                <option value="Tecnico">Técnico de Campo</option>
+                                                <option value="Logistico">Especialista Logístico</option>
                                             </select>
                                         </div>
                                     </div>

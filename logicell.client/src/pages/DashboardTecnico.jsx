@@ -1,29 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Swal from 'sweetalert2';
+import { repuestosService } from '../services/api'; // Importamos el servicio
 
-// DashboardTecnico: panel operativo para técnicos.
-// Comentarios técnicos breves añadidos.
 const DashboardTecnico = () => {
-    // Estado: pestaña activa (historial | nueva | devoluciones | importaciones)
     const [tabActiva, setTabActiva] = useState('historial');
 
-    // Catálogo mock (disponible en bodegas)
-    const [catalogo] = useState([
-        { idRepuesto: 1, numeroSerial: 'RBS-TX-001', nombre: 'Transceptor RBS 6000', bodega: 'Metro Este' },
-        { idRepuesto: 3, numeroSerial: 'CAB-FO-100', nombre: 'Bobina Fibra Óptica 100m', bodega: 'Huetar' },
-        { idRepuesto: 4, numeroSerial: 'PWR-SUP-48V', nombre: 'Fuente de Poder 48V DC', bodega: 'Metro Oeste' },
-        { idRepuesto: 5, numeroSerial: 'ANT-SEC-065', nombre: 'Antena Sectorial 65°', bodega: 'Chorotega' }
-    ]);
+    // 1. EL CATÁLOGO INICIA VACÍO, SE LLENARÁ DESDE LA BASE DE DATOS
+    const [catalogo, setCatalogo] = useState([]);
 
-    // Historial mock de pedidos del técnico
+    // Historial mock de pedidos del técnico (Se conectará después)
     const [historial] = useState([
         { idSolicitud: 101, fecha: '10/06/2026', sitioMotivo: 'BTS-SJ-045 (Falla de Tx)', materiales: '1x Transceptor RBS 6000', estado: 'Pendiente' },
         { idSolicitud: 102, fecha: '09/06/2026', sitioMotivo: 'RBS-A-102 (Ampliación)', materiales: '2x Bobina Fibra Óptica 100m', estado: 'Aprobado' }
     ]);
 
-    // Equipos asignados al técnico (para devoluciones)
+    // Equipos asignados al técnico mock (Se conectará después)
     const [equiposAsignados, setEquiposAsignados] = useState([
         { idAsignacion: 1, numeroSerial: 'ANT-OLD-99', nombre: 'Antena Sectorial Dañada', fechaPrestamo: '01/06/2026', fechaDevolucion: '15/06/2026', estado: 'Pendiente de Devolución' },
         { idAsignacion: 2, numeroSerial: 'RBS-TX-002', nombre: 'Transceptor Temporal', fechaPrestamo: '05/06/2026', fechaDevolucion: '20/06/2026', estado: 'En uso' }
@@ -39,12 +32,29 @@ const DashboardTecnico = () => {
     const [filtroTexto, setFiltroTexto] = useState('');
     const [filtroUbicacion, setFiltroUbicacion] = useState('');
 
-    // --- NUEVO: LÓGICA DE FILTRADO ---
+    // --- NUEVO: FUNCIÓN PARA CARGAR EL CATÁLOGO REAL ---
+    const cargarCatalogo = async () => {
+        try {
+            const data = await repuestosService.obtenerTodos();
+            // Regla de negocio: El técnico SOLO puede ver lo que está 'Disponible'
+            const repuestosDisponibles = data.filter(r => r.estadoOperativo === 'Disponible');
+            setCatalogo(repuestosDisponibles);
+        } catch (error) {
+            console.error("Error al cargar catálogo:", error);
+            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo cargar el inventario de las bodegas.' });
+        }
+    };
+
+    // Cargar datos al abrir la pantalla
+    useEffect(() => {
+        cargarCatalogo();
+    }, []);
+
+    // LÓGICA DE FILTRADO
     const catalogoFiltrado = catalogo.filter(item => {
         const coincideTexto = item.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
             item.numeroSerial.toLowerCase().includes(filtroTexto.toLowerCase());
         const coincideUbicacion = filtroUbicacion === '' || item.bodega === filtroUbicacion;
-
         return coincideTexto && coincideUbicacion;
     });
 
@@ -57,19 +67,18 @@ const DashboardTecnico = () => {
         setCarrito(carrito.filter(item => item.idRepuesto !== idRepuesto));
     };
 
-    // Enviar solicitud: valida y notifica (mock)
+    // Enviar solicitud (Aún es mock, se conectará con SolicitudesController luego)
     const handleEnviarSolicitud = () => {
         if (carrito.length === 0 || destino.trim() === '') {
-            Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Selecciona un repuesto y escribe el destino.', background: '#212529', color: '#fff' });
+            Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Selecciona un repuesto y escribe la justificación/destino.', background: '#212529', color: '#fff' });
             return;
         }
-        Swal.fire({ icon: 'success', title: 'Solicitud Enviada', text: 'El logístico evaluará la solicitud y reservará los equipos.', background: '#212529', color: '#fff', timer: 2000, showConfirmButton: false });
+        Swal.fire({ icon: 'success', title: 'Solicitud Simulada', text: 'Próximamente esto se guardará en la base de datos.', background: '#212529', color: '#fff', timer: 2000, showConfirmButton: false });
         setCarrito([]);
         setDestino('');
         setTabActiva('historial');
     };
 
-    // Solicitud de devolución: confirmación y cambio de estado (mock)
     const handleSolicitarDevolucion = async (idAsignacion) => {
         const confirmacion = await Swal.fire({
             title: '¿Generar solicitud de devolución?',
@@ -81,7 +90,6 @@ const DashboardTecnico = () => {
             confirmButtonText: 'Sí, devolver',
             background: '#212529', color: '#fff'
         });
-
         if (confirmacion.isConfirmed) {
             setEquiposAsignados(equiposAsignados.map(eq =>
                 eq.idAsignacion === idAsignacion ? { ...eq, estado: 'Devolución en Trámite' } : eq
@@ -90,7 +98,6 @@ const DashboardTecnico = () => {
         }
     };
 
-    // Solicitud de importación: envía formulario (mock)
     const handleSolicitarImportacion = (e) => {
         e.preventDefault();
         Swal.fire({
@@ -107,7 +114,6 @@ const DashboardTecnico = () => {
     return (
         <div className="d-flex flex-column min-vh-100 bg-dark">
             <Navbar />
-
             <div className="flex-grow-1 container-fluid p-4 text-light pb-5">
                 <div className="d-flex justify-content-between align-items-center mb-3">
                     <h2><i className="bi bi-tools text-success me-2"></i>Panel Operativo</h2>
@@ -198,8 +204,6 @@ const DashboardTecnico = () => {
                                     <span><i className></i>Catálogo Disponible</span>
                                     <span className="badge bg-info text-dark">{catalogoFiltrado.length} repuestos encontrados</span>
                                 </div>
-
-                                {/* NUEVO: BARRA DE FILTROS */}
                                 <div className="card-body bg-dark border-bottom border-secondary py-2 px-3">
                                     <div className="row g-2">
                                         <div className="col-md-7">
@@ -226,7 +230,6 @@ const DashboardTecnico = () => {
                                                     value={filtroUbicacion}
                                                     onChange={(e) => setFiltroUbicacion(e.target.value)}
                                                 >
-                                                    {/* Opciones actualizadas con las Zonas Definitivas */}
                                                     <option value="">Todas las ubicaciones</option>
                                                     <option value="Chorotega">Chorotega</option>
                                                     <option value="Huetar">Huetar</option>
@@ -238,7 +241,6 @@ const DashboardTecnico = () => {
                                         </div>
                                     </div>
                                 </div>
-
                                 <div className="card-body p-0">
                                     <table className="table table-dark table-hover mb-0">
                                         <thead><tr><th className="px-4 py-3">Serial</th><th className="py-3">Componente</th><th className="py-3">Ubicación</th><th className="py-3 text-center">Acción</th></tr></thead>
@@ -260,7 +262,7 @@ const DashboardTecnico = () => {
                                             ) : (
                                                 <tr>
                                                     <td colSpan="4" className="text-center py-4 text-muted">
-                                                        No se encontraron repuestos con esos filtros.
+                                                        No se encontraron repuestos disponibles con esos filtros.
                                                     </td>
                                                 </tr>
                                             )}
@@ -288,7 +290,7 @@ const DashboardTecnico = () => {
                                     <div className="mt-auto border-top border-secondary pt-3">
                                         <div className="mb-3">
                                             <label className="form-label small fw-bold text-light">Justificación Solicitud:</label>
-                                            <input type="text" className="form-control bg-secondary text-light border-dark" value={destino} onChange={(e) => setDestino(e.target.value)} />
+                                            <input type="text" className="form-control bg-secondary text-light border-dark" placeholder="Ej: Falla sitio Heredia..." value={destino} onChange={(e) => setDestino(e.target.value)} />
                                         </div>
                                         <button onClick={handleEnviarSolicitud} className="btn btn-success fw-bold w-100" disabled={carrito.length === 0}>ENVIAR SOLICITUD</button>
                                     </div>
@@ -298,7 +300,7 @@ const DashboardTecnico = () => {
                     </div>
                 )}
 
-                {/* PESTAÑA: DEVOLUCIONES (RF6) */}
+                {/* PESTAÑA: DEVOLUCIONES */}
                 {tabActiva === 'devoluciones' && (
                     <div className="card bg-secondary border-0 shadow">
                         <div className="card-header bg-dark text-light fw-bold py-3">
@@ -343,7 +345,7 @@ const DashboardTecnico = () => {
                     </div>
                 )}
 
-                {/* PESTAÑA: IMPORTACIONES (RF5) */}
+                {/* PESTAÑA: IMPORTACIONES */}
                 {tabActiva === 'importaciones' && (
                     <div className="card bg-secondary border-0 shadow">
                         <div className="card-header bg-dark text-light fw-bold py-3">
