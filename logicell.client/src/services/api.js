@@ -56,4 +56,28 @@ export const repuestosService = {
     }
 };
 
+// 5. MÓDULO DE SOLICITUDES
+export const solicitudesService = {
+    obtenerTodas: async () => {
+        const response = await api.get('/Solicitudes');
+        return response.data;
+    },
+    crear: async (datos) => {
+        const response = await api.post('/Solicitudes', datos);
+        return response.data;
+    },
+    procesar: async (id, datos) => {
+        const response = await api.put(`/Solicitudes/procesar/${id}`, datos);
+        return response.data;
+    },
+    crearDevolucion: async (datos) => {
+        const response = await api.post('/Solicitudes/devolucion', datos);
+        return response.data;
+    },
+    crearImportacion: async (datos) => {
+        const response = await api.post('/Solicitudes/importacion', datos);
+        return response.data;
+    }
+};
+
 export default api;
