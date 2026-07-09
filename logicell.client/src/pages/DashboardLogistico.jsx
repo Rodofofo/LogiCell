@@ -296,9 +296,12 @@ const DashboardLogistico = () => {
                                         <tr key={sol.idSolicitud}>
                                             <td className="px-4 align-middle fw-bold text-warning">#{sol.idSolicitud}</td>
                                             <td className="align-middle">
-                                                <span className={`badge border ${sol.tipoSolicitud === 'Despacho' ? 'border-warning text-warning' :
-                                                    sol.tipoSolicitud === 'Devolución' ? 'border-danger text-danger' : 'border-info text-info'
-                                                    }`}>
+                                                <span className={`badge border ${
+                                                    sol.tipoSolicitud === 'Despacho' ? 'border-warning text-warning' :
+                                                    sol.tipoSolicitud === 'Importación' ? 'border-info text-info' :
+                                                    sol.tipoSolicitud === 'Devolucion' ? 'border-danger text-danger' :
+                                                    ``
+                                                }`}>
                                                     {sol.tipoSolicitud}
                                                 </span>
                                             </td>
@@ -312,6 +315,8 @@ const DashboardLogistico = () => {
                                             <td className="align-middle text-center">
                                                 {sol.estado === 'Pendiente' ? (
                                                     <span className="badge bg-warning text-dark">{sol.estado}</span>
+                                                ) : sol.estado === 'Completada' ? (
+                                                    <span className="badge bg-transparent border border-light text-light">{sol.estado}</span>
                                                 ) : sol.estado === 'Aprobado' ? (
                                                     <span className="badge bg-success">{sol.estado}</span>
                                                 ) : (

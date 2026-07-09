@@ -2,55 +2,79 @@ import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Swal from 'sweetalert2';
-import { repuestosService } from '../services/api'; // Importamos el servicio
+import { repuestosService, solicitudesService } from '../services/api';
 
 const DashboardTecnico = () => {
     const [tabActiva, setTabActiva] = useState('historial');
 
-    // 1. EL CATÁLOGO INICIA VACÍO, SE LLENARÁ DESDE LA BASE DE DATOS
     const [catalogo, setCatalogo] = useState([]);
+    const [historial, setHistorial] = useState([]);
+    const [equiposAsignados, setEquiposAsignados] = useState([]);
 
-    // Historial mock de pedidos del técnico (Se conectará después)
-    const [historial] = useState([
-        { idSolicitud: 101, fecha: '10/06/2026', sitioMotivo: 'BTS-SJ-045 (Falla de Tx)', materiales: '1x Transceptor RBS 6000', estado: 'Pendiente' },
-        { idSolicitud: 102, fecha: '09/06/2026', sitioMotivo: 'RBS-A-102 (Ampliación)', materiales: '2x Bobina Fibra Óptica 100m', estado: 'Aprobado' }
-    ]);
-
-    // Equipos asignados al técnico mock (Se conectará después)
-    const [equiposAsignados, setEquiposAsignados] = useState([
-        { idAsignacion: 1, numeroSerial: 'ANT-OLD-99', nombre: 'Antena Sectorial Dañada', fechaPrestamo: '01/06/2026', fechaDevolucion: '15/06/2026', estado: 'Pendiente de Devolución' },
-        { idAsignacion: 2, numeroSerial: 'RBS-TX-002', nombre: 'Transceptor Temporal', fechaPrestamo: '05/06/2026', fechaDevolucion: '20/06/2026', estado: 'En uso' }
-    ]);
-
-    // Estados de formularios y selección
     const [carrito, setCarrito] = useState([]);
     const [destino, setDestino] = useState('');
     const [descripcionImportacion, setDescripcionImportacion] = useState('');
     const [motivoImportacion, setMotivoImportacion] = useState('');
 
-    // Estados de filtros para catálogo
     const [filtroTexto, setFiltroTexto] = useState('');
     const [filtroUbicacion, setFiltroUbicacion] = useState('');
 
-    // --- NUEVO: FUNCIÓN PARA CARGAR EL CATÁLOGO REAL ---
-    const cargarCatalogo = async () => {
+    const cargarDatos = async () => {
         try {
-            const data = await repuestosService.obtenerTodos();
-            // Regla de negocio: El técnico SOLO puede ver lo que está 'Disponible'
-            const repuestosDisponibles = data.filter(r => r.estadoOperativo === 'Disponible');
-            setCatalogo(repuestosDisponibles);
+            const [repuestosData, solicitudesData] = await Promise.all([
+                repuestosService.obtenerTodos(),
+                solicitudesService.obtenerTodas()
+            ]);
+
+            const correo = localStorage.getItem('userCorreo');
+
+            setCatalogo(repuestosData.filter(r => r.estadoOperativo === 'Disponible'));
+
+            const misPedidos = solicitudesData.filter(s => s.tecnico === correo);
+            setHistorial(misPedidos);
+
+            const misDespachosAprobados = misPedidos.filter(s => (s.tipoSolicitud === 'Despacho' || s.tipoSolicitud === 'Importación') && s.estado === 'Aprobado');
+            const asignados = [];
+
+            misDespachosAprobados.forEach(despacho => {
+                const match = despacho.materiales.match(/\(([^)]+)\)/);
+                if (match) {
+                    const serial = match[1];
+                    const repuestoBD = repuestosData.find(r => r.numeroSerial === serial);
+
+                    if (repuestoBD && repuestoBD.estadoOperativo === 'Entregado') {
+                        const devolucionPendiente = misPedidos.find(s =>
+                            s.tipoSolicitud === 'Devolucion' &&
+                            s.estado === 'Pendiente' &&
+                            s.materiales.includes(`(${serial})`)
+                        );
+
+                        if (!asignados.find(a => a.numeroSerial === serial)) {
+                            asignados.push({
+                                idRepuesto: repuestoBD.idRepuesto,
+                                numeroSerial: serial,
+                                nombre: repuestoBD.nombre,
+                                fechaPrestamo: despacho.fecha,
+                                fechaDevolucion: despacho.fechaLimite !== "N/A" ? despacho.fechaLimite : "Sin fecha",
+                                estado: devolucionPendiente ? 'Devolución en Trámite' : 'En uso'
+                            });
+                        }
+                    }
+                }
+            });
+
+            setEquiposAsignados(asignados);
+
         } catch (error) {
-            console.error("Error al cargar catálogo:", error);
-            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo cargar el inventario de las bodegas.' });
+            console.error("Error al cargar datos:", error);
+            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudieron sincronizar los datos operativos.' });
         }
     };
 
-    // Cargar datos al abrir la pantalla
     useEffect(() => {
-        cargarCatalogo();
+        cargarDatos();
     }, []);
 
-    // LÓGICA DE FILTRADO
     const catalogoFiltrado = catalogo.filter(item => {
         const coincideTexto = item.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) ||
             item.numeroSerial.toLowerCase().includes(filtroTexto.toLowerCase());
@@ -58,7 +82,6 @@ const DashboardTecnico = () => {
         return coincideTexto && coincideUbicacion;
     });
 
-    // Funciones de carrito: agregar / quitar
     const agregarAlCarrito = (repuesto) => {
         if (!carrito.find(item => item.idRepuesto === repuesto.idRepuesto)) setCarrito([...carrito, repuesto]);
     };
@@ -67,48 +90,103 @@ const DashboardTecnico = () => {
         setCarrito(carrito.filter(item => item.idRepuesto !== idRepuesto));
     };
 
-    // Enviar solicitud (Aún es mock, se conectará con SolicitudesController luego)
-    const handleEnviarSolicitud = () => {
+    const handleEnviarSolicitud = async () => {
         if (carrito.length === 0 || destino.trim() === '') {
             Swal.fire({ icon: 'warning', title: 'Datos incompletos', text: 'Selecciona un repuesto y escribe la justificación/destino.', background: '#212529', color: '#fff' });
             return;
         }
-        Swal.fire({ icon: 'success', title: 'Solicitud Simulada', text: 'Próximamente esto se guardará en la base de datos.', background: '#212529', color: '#fff', timer: 2000, showConfirmButton: false });
-        setCarrito([]);
-        setDestino('');
-        setTabActiva('historial');
-    };
 
-    const handleSolicitarDevolucion = async (idAsignacion) => {
-        const confirmacion = await Swal.fire({
-            title: '¿Generar solicitud de devolución?',
-            text: "El equipo logístico será notificado para recibir esta pieza.",
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#198754',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Sí, devolver',
-            background: '#212529', color: '#fff'
-        });
-        if (confirmacion.isConfirmed) {
-            setEquiposAsignados(equiposAsignados.map(eq =>
-                eq.idAsignacion === idAsignacion ? { ...eq, estado: 'Devolución en Trámite' } : eq
-            ));
-            Swal.fire({ icon: 'success', title: 'En Trámite', text: 'Solicitud de devolución generada con éxito.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+        const payload = {
+            correoTecnico: localStorage.getItem('userCorreo'),
+            idsRepuestos: carrito.map(item => item.idRepuesto),
+            justificacion: destino
+        };
+
+        try {
+            await solicitudesService.crear(payload);
+            Swal.fire({ icon: 'success', title: 'Solicitud Enviada', text: 'El logístico evaluará la solicitud y los repuestos han sido reservados.', background: '#212529', color: '#fff', timer: 2500, showConfirmButton: false });
+            setCarrito([]);
+            setDestino('');
+            setTabActiva('historial');
+            cargarDatos();
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: 'Error', text: error.response?.data?.mensaje || 'No se pudo enviar la solicitud.', background: '#212529', color: '#fff' });
         }
     };
 
-    const handleSolicitarImportacion = (e) => {
-        e.preventDefault();
-        Swal.fire({
-            icon: 'success',
-            title: 'Solicitud de Importación Enviada',
-            text: 'El departamento de logística evaluará la compra de este repuesto internacional.',
-            background: '#212529', color: '#fff'
+    // --- CORRECCIÓN: AHORA ENVÍA EL ESTADO FÍSICO A C# ---
+    const handleSolicitarDevolucion = async (idRepuesto) => {
+        const { value: estadoFisico, isConfirmed } = await Swal.fire({
+            title: '¿Generar solicitud de devolución?',
+            text: "Indica el estado físico en el que devuelves este componente:",
+            icon: 'question',
+            input: 'select',
+            inputOptions: {
+                'Disponible': 'Buen estado (Regresa a inventario)',
+                'Dado de baja': 'Dañado / Defectuoso (Dar de baja)'
+            },
+            inputPlaceholder: 'Selecciona el estado...',
+            showCancelButton: true,
+            confirmButtonColor: '#198754',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, enviar',
+            cancelButtonText: 'Cancelar',
+            background: '#212529', color: '#fff',
+            customClass: {
+                input: 'text-dark bg-light'
+            },
+            inputValidator: (value) => {
+                if (!value) {
+                    return 'Debes seleccionar el estado del equipo';
+                }
+            }
         });
-        setDescripcionImportacion('');
-        setMotivoImportacion('');
-        setTabActiva('historial');
+
+        if (isConfirmed && estadoFisico) {
+            try {
+                await solicitudesService.crearDevolucion({
+                    correoTecnico: localStorage.getItem('userCorreo'),
+                    idRepuesto: idRepuesto,
+                    estadoFisico: estadoFisico
+                });
+
+                Swal.fire({ icon: 'success', title: 'En Trámite', text: 'Solicitud de devolución generada con éxito.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+                cargarDatos();
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'Hubo un problema al procesar la devolución.' });
+            }
+        }
+    };
+
+    const handleSolicitarImportacion = async (e) => {
+        e.preventDefault();
+
+        if (descripcionImportacion.trim() === '' || motivoImportacion.trim() === '') {
+            Swal.fire({ icon: 'warning', title: 'Campos vacíos', text: 'Por favor completa ambos campos.', background: '#212529', color: '#fff' });
+            return;
+        }
+
+        try {
+            await solicitudesService.crearImportacion({
+                correoTecnico: localStorage.getItem('userCorreo'),
+                modeloRepuesto: descripcionImportacion,
+                justificacion: motivoImportacion
+            });
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Importación Solicitada',
+                text: 'El departamento de logística evaluará la compra de este repuesto.',
+                background: '#212529', color: '#fff'
+            });
+
+            setDescripcionImportacion('');
+            setMotivoImportacion('');
+            setTabActiva('historial');
+            cargarDatos();
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Hubo un problema al solicitar la importación.', background: '#212529', color: '#fff' });
+        }
     };
 
     return (
@@ -119,7 +197,6 @@ const DashboardTecnico = () => {
                     <h2><i className="bi bi-tools text-success me-2"></i>Panel Operativo</h2>
                 </div>
 
-                {/* MENÚ DE PESTAÑAS */}
                 <ul className="nav nav-tabs border-secondary mb-4">
                     <li className="nav-item">
                         <button
@@ -143,9 +220,9 @@ const DashboardTecnico = () => {
                             onClick={() => setTabActiva('devoluciones')}
                         >
                             <i className="bi bi-arrow-return-left me-2"></i>Devoluciones
-                            {equiposAsignados.filter(e => e.estado === 'Pendiente de Devolución').length > 0 && (
+                            {equiposAsignados.filter(e => e.estado === 'Devolución en Trámite').length > 0 && (
                                 <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                                    {equiposAsignados.filter(e => e.estado === 'Pendiente de Devolución').length}
+                                    {equiposAsignados.filter(e => e.estado === 'Devolución en Trámite').length}
                                 </span>
                             )}
                         </button>
@@ -160,7 +237,6 @@ const DashboardTecnico = () => {
                     </li>
                 </ul>
 
-                {/* PESTAÑA: MIS PEDIDOS */}
                 {tabActiva === 'historial' && (
                     <div className="card bg-secondary border-0 shadow">
                         <div className="card-header bg-dark text-light fw-bold py-3">
@@ -171,6 +247,7 @@ const DashboardTecnico = () => {
                                 <thead>
                                     <tr>
                                         <th className="px-4 py-3">ID Pedido</th>
+                                        <th className="py-3">Tipo</th>
                                         <th className="py-3">Fecha</th>
                                         <th className="py-3">Justificación</th>
                                         <th className="py-3">Materiales Pedidos</th>
@@ -178,24 +255,52 @@ const DashboardTecnico = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {historial.map((pedido) => (
-                                        <tr key={pedido.idSolicitud}>
-                                            <td className="px-4 align-middle fw-bold text-info">#{pedido.idSolicitud}</td>
-                                            <td className="align-middle small">{pedido.fecha}</td>
-                                            <td className="align-middle fw-bold">{pedido.sitioMotivo}</td>
-                                            <td className="align-middle text-light small">{pedido.materiales}</td>
-                                            <td className="align-middle text-center">
-                                                <span className={`badge ${pedido.estado === 'Pendiente' ? 'bg-warning text-dark' : 'bg-success'}`}>{pedido.estado}</span>
-                                            </td>
+                                    {historial.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="6" className="text-center py-4 text-white-50">Aún no tienes pedidos registrados en el sistema.</td>
                                         </tr>
-                                    ))}
+                                    ) : (
+                                        historial.map((pedido) => (
+                                            <tr key={pedido.idSolicitud}>
+                                                <td className="px-4 align-middle fw-bold text-info">#{pedido.idSolicitud}</td>
+                                                <td className="align-middle">
+                                                    <span className={`badge border ${pedido.tipoSolicitud === 'Despacho' ? 'border-warning text-warning' :
+                                                            pedido.tipoSolicitud === 'Importación' ? 'border-info text-info' :
+                                                                pedido.tipoSolicitud === 'Devolucion' ? 'border-danger text-danger' :
+                                                                    ''
+                                                        }`}>
+                                                        {pedido.tipoSolicitud}
+                                                    </span>
+                                                </td>
+                                                <td className="align-middle small">{pedido.fecha}</td>
+                                                <td className="align-middle fw-bold">{pedido.sitioMotivo}</td>
+                                                <td className="align-middle text-light small">{pedido.materiales}</td>
+                                                <td className="align-middle text-center">
+                                                    {pedido.estado === 'Rechazado' ? (
+                                                        <div className="d-flex flex-column align-items-center">
+                                                            <span className="badge bg-danger mb-1">{pedido.estado}</span>
+                                                            <span className="text-white-50 text-center" style={{ fontSize: '0.75rem', maxWidth: '150px' }}>
+                                                                {pedido.motivoRechazo}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                            <span className={`badge ${pedido.estado === 'Pendiente' ? 'bg-warning text-dark' :
+                                                                    pedido.estado === 'Completada' ? 'bg-transparent border border-light text-light' :
+                                                                        'bg-success'
+                                                                }`}>
+                                                                {pedido.estado}
+                                                            </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 )}
 
-                {/* PESTAÑA: NUEVA SOLICITUD */}
                 {tabActiva === 'nueva' && (
                     <div className="row">
                         <div className="col-lg-8 mb-4">
@@ -300,7 +405,6 @@ const DashboardTecnico = () => {
                     </div>
                 )}
 
-                {/* PESTAÑA: DEVOLUCIONES */}
                 {tabActiva === 'devoluciones' && (
                     <div className="card bg-secondary border-0 shadow">
                         <div className="card-header bg-dark text-light fw-bold py-3">
@@ -319,33 +423,38 @@ const DashboardTecnico = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {equiposAsignados.map((eq) => (
-                                        <tr key={eq.idAsignacion}>
-                                            <td className="px-4 align-middle fw-bold text-info">{eq.numeroSerial}</td>
-                                            <td className="align-middle">{eq.nombre}</td>
-                                            <td className="align-middle text-small">{eq.fechaPrestamo}</td>
-                                            <td className="align-middle fw-bold text-danger">{eq.fechaDevolucion}</td>
-                                            <td className="align-middle text-center">
-                                                <span className={`badge ${eq.estado === 'Devolución en Trámite' ? 'bg-primary' : eq.estado === 'En uso' ? 'bg-success' : 'bg-warning text-dark'}`}>{eq.estado}</span>
-                                            </td>
-                                            <td className="align-middle text-center">
-                                                <button
-                                                    onClick={() => handleSolicitarDevolucion(eq.idAsignacion)}
-                                                    className="btn btn-sm btn-outline-warning"
-                                                    disabled={eq.estado === 'Devolución en Trámite'}
-                                                >
-                                                    <i className="bi bi-arrow-return-left me-1"></i>Devolver
-                                                </button>
-                                            </td>
+                                    {equiposAsignados.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="6" className="text-center py-4 text-white-50">No tienes equipos a cargo actualmente.</td>
                                         </tr>
-                                    ))}
+                                    ) : (
+                                        equiposAsignados.map((eq) => (
+                                            <tr key={eq.numeroSerial}>
+                                                <td className="px-4 align-middle fw-bold text-info">{eq.numeroSerial}</td>
+                                                <td className="align-middle">{eq.nombre}</td>
+                                                <td className="align-middle text-small">{eq.fechaPrestamo}</td>
+                                                <td className="align-middle fw-bold text-danger">{eq.fechaDevolucion}</td>
+                                                <td className="align-middle text-center">
+                                                    <span className={`badge ${eq.estado === 'Devolución en Trámite' ? 'bg-primary' : 'bg-success'}`}>{eq.estado}</span>
+                                                </td>
+                                                <td className="align-middle text-center">
+                                                    <button
+                                                        onClick={() => handleSolicitarDevolucion(eq.idRepuesto)}
+                                                        className="btn btn-sm btn-outline-warning"
+                                                        disabled={eq.estado === 'Devolución en Trámite'}
+                                                    >
+                                                        <i className="bi bi-arrow-return-left me-1"></i>Devolver
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 )}
 
-                {/* PESTAÑA: IMPORTACIONES */}
                 {tabActiva === 'importaciones' && (
                     <div className="card bg-secondary border-0 shadow">
                         <div className="card-header bg-dark text-light fw-bold py-3">

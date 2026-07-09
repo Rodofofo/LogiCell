@@ -30,6 +30,8 @@ namespace LogiCell.Server.Controllers
                 IdSolicitud = s.IdSolicitud,
                 Tecnico = s.IdUsuarioSolicitanteNavigation.CorreoElectronico,
                 Fecha = s.FechaSolicitud?.ToString("dd/MM/yyyy") ?? "",
+                // NUEVO: Agregamos la fecha límite extraída de la base de datos
+                FechaLimite = s.FechaEsperadaDevolucion?.ToString("dd/MM/yyyy") ?? "N/A", 
                 SitioMotivo = s.NotasAdicionales ?? "Sin justificación",
                 Materiales = $"{s.IdRepuestoNavigation.Nombre} ({s.IdRepuestoNavigation.NumeroSerial})",
                 TipoSolicitud = s.TipoSolicitud,
@@ -86,7 +88,8 @@ namespace LogiCell.Server.Controllers
                 IdRepuesto = repuesto.IdRepuesto,
                 TipoSolicitud = "Devolucion",
                 EstadoSolicitud = "Pendiente",
-                NotasAdicionales = "Devolución de equipo a bodega",
+                // Guardamos la decisión del técnico en las notas para que el logístico y el sistema lo sepan
+                NotasAdicionales = $"Estado reportado por técnico: {request.EstadoFisico}",
                 FechaSolicitud = DateTime.Now
             };
 
@@ -102,29 +105,26 @@ namespace LogiCell.Server.Controllers
             var solicitante = await _context.Usuarios.FirstOrDefaultAsync(u => u.CorreoElectronico == request.CorreoTecnico);
             if (solicitante == null) return BadRequest(new { mensaje = "Usuario no encontrado." });
 
-            // 1. Buscamos cualquier bodega válida para asignar temporalmente el repuesto virtual
-            var bodegaTemporal = await _context.Bodegas.FirstOrDefaultAsync();
-            if (bodegaTemporal == null) return BadRequest(new { mensaje = "No hay bodegas configuradas en el sistema." });
+            var bodegaMetroEste = await _context.Bodegas.FirstOrDefaultAsync(b => b.NombreBodega == "Metro Este");
+            if (bodegaMetroEste == null) return BadRequest(new { mensaje = "La bodega Metro Este no está configurada." });
 
-            // 2. Creamos el Repuesto Virtual
             var repuestoVirtual = new Repuesto
             {
-                NumeroSerial = "REQ-" + new Random().Next(10000, 99999).ToString(),
+                NumeroSerial = "REQ-" + new Random().Next(10000, 99999).ToString(), 
                 Nombre = request.ModeloRepuesto,
                 Descripcion = "Pendiente de importación especial",
-                IdBodega = bodegaTemporal.IdBodega,
-                EstadoOperativo = "En Trámite" // Estado lógico especial
+                IdBodega = bodegaMetroEste.IdBodega,
+                EstadoOperativo = "En Trámite" 
             };
 
             _context.Repuestos.Add(repuestoVirtual);
-            await _context.SaveChangesAsync(); // Guardamos para que SQL genere el IdRepuesto
+            await _context.SaveChangesAsync(); 
 
-            // 3. Atamos la solicitud a este nuevo repuesto virtual
             var nuevaSolicitud = new Solicitude
             {
                 IdUsuarioSolicitante = solicitante.IdUsuario,
                 IdRepuesto = repuestoVirtual.IdRepuesto,
-                TipoSolicitud = "Importación",
+                TipoSolicitud = "Importación", 
                 EstadoSolicitud = "Pendiente",
                 NotasAdicionales = request.Justificacion,
                 FechaSolicitud = DateTime.Now
@@ -155,25 +155,33 @@ namespace LogiCell.Server.Controllers
                 if (solicitud.TipoSolicitud == "Devolucion")
                 {
                     solicitud.EstadoSolicitud = "Completada";
-                    solicitud.IdRepuestoNavigation.EstadoOperativo = "Dado de baja";
+
+                    if (solicitud.NotasAdicionales != null && solicitud.NotasAdicionales.Contains("Disponible"))
+                    {
+                        solicitud.IdRepuestoNavigation.EstadoOperativo = "Disponible";
+                    }
+                    else
+                    {
+                        solicitud.IdRepuestoNavigation.EstadoOperativo = "Dado de baja";
+                    }
                 }
                 else
                 {
+                    // Toda solicitud aprobada que NO sea devolución (Despacho o Importación) pasa a Entregado al técnico
                     solicitud.EstadoSolicitud = "Aprobada";
                     solicitud.IdRepuestoNavigation.EstadoOperativo = "Entregado";
+                    solicitud.FechaEsperadaDevolucion = DateTime.Now.AddMonths(1);
                 }
             }
             else if (request.EstadoNuevo == "Rechazado")
             {
                 solicitud.EstadoSolicitud = "Rechazada";
                 solicitud.MotivoRechazo = request.MotivoRechazo;
-
-                // Si es un despacho y se rechaza, la pieza vuelve al estante
+                
                 if (solicitud.TipoSolicitud == "Despacho")
                 {
                     solicitud.IdRepuestoNavigation.EstadoOperativo = "Disponible";
                 }
-                // Si es una importación rechazada, el repuesto virtual se da de baja
                 else if (solicitud.TipoSolicitud == "Importación")
                 {
                     solicitud.IdRepuestoNavigation.EstadoOperativo = "Dado de baja";
@@ -191,6 +199,7 @@ namespace LogiCell.Server.Controllers
         public int IdSolicitud { get; set; }
         public string Tecnico { get; set; } = null!;
         public string Fecha { get; set; } = null!;
+        public string FechaLimite { get; set; } = null!; // NUEVO
         public string SitioMotivo { get; set; } = null!;
         public string Materiales { get; set; } = null!;
         public string TipoSolicitud { get; set; } = null!;
@@ -201,7 +210,7 @@ namespace LogiCell.Server.Controllers
     public class NuevaSolicitudDTO
     {
         public string CorreoTecnico { get; set; } = null!;
-        public List<int> IdsRepuestos { get; set; } = new List<int>();
+        public List<int> IdsRepuestos { get; set; } = new List<int>(); 
         public string Justificacion { get; set; } = null!;
     }
 
@@ -209,6 +218,7 @@ namespace LogiCell.Server.Controllers
     {
         public string CorreoTecnico { get; set; } = null!;
         public int IdRepuesto { get; set; }
+        public string EstadoFisico { get; set; } = null!; // NUEVO
     }
 
     public class NuevaImportacionDTO
