@@ -16,7 +16,6 @@ namespace LogiCell.Server.Controllers
             _context = context;
         }
 
-        // 1. READ: Obtener todas las solicitudes
         [HttpGet]
         public async Task<IActionResult> GetSolicitudes()
         {
@@ -32,10 +31,8 @@ namespace LogiCell.Server.Controllers
                 Tecnico = s.IdUsuarioSolicitanteNavigation.CorreoElectronico,
                 Fecha = s.FechaSolicitud?.ToString("dd/MM/yyyy") ?? "",
                 SitioMotivo = s.NotasAdicionales ?? "Sin justificación",
-                // Mostramos el nombre y el serial para que el logístico sepa exactamente qué es
                 Materiales = $"{s.IdRepuestoNavigation.Nombre} ({s.IdRepuestoNavigation.NumeroSerial})",
                 TipoSolicitud = s.TipoSolicitud,
-                // Adaptamos la base de datos (Aprobada/Rechazada) a lo que React tiene en sus etiquetas (Aprobado/Rechazado)
                 Estado = s.EstadoSolicitud == "Aprobada" ? "Aprobado" :
                          s.EstadoSolicitud == "Rechazada" ? "Rechazado" :
                          s.EstadoSolicitud ?? "Pendiente",
@@ -45,25 +42,17 @@ namespace LogiCell.Server.Controllers
             return Ok(solicitudesReact);
         }
 
-        // 2. CREATE: Enviar nueva solicitud (Carrito del Técnico)
         [HttpPost]
         public async Task<IActionResult> CrearSolicitud([FromBody] NuevaSolicitudDTO request)
         {
-            // Buscar al técnico usando el correo (que ya tienes guardado en el localStorage de React)
             var solicitante = await _context.Usuarios.FirstOrDefaultAsync(u => u.CorreoElectronico == request.CorreoTecnico);
             if (solicitante == null) return BadRequest(new { mensaje = "Usuario solicitante no encontrado." });
 
-            // Procesar el carrito: Si hay 3 repuestos, se crean 3 solicitudes independientes
             foreach (var idRepuesto in request.IdsRepuestos)
             {
                 var repuesto = await _context.Repuestos.FindAsync(idRepuesto);
-                // Si alguien más se lo llevó en la fracción de segundo antes, lo ignoramos
-                if (repuesto == null || repuesto.EstadoOperativo != "Disponible")
-                {
-                    continue;
-                }
+                if (repuesto == null || repuesto.EstadoOperativo != "Disponible") continue;
 
-                // 1. Nace la solicitud
                 var nuevaSolicitud = new Solicitude
                 {
                     IdUsuarioSolicitante = solicitante.IdUsuario,
@@ -75,18 +64,78 @@ namespace LogiCell.Server.Controllers
                 };
 
                 _context.Solicitudes.Add(nuevaSolicitud);
-
-                // 2. Reacción en cadena: El repuesto desaparece del catálogo disponible
                 repuesto.EstadoOperativo = "Reservado";
             }
 
-            // Entity Framework guarda las nuevas solicitudes y actualiza los repuestos en una sola transacción
             await _context.SaveChangesAsync();
-
             return Ok(new { mensaje = "Solicitudes creadas y repuestos reservados exitosamente." });
         }
 
-        // 3. UPDATE: Procesar Solicitud (El Logístico aprueba o rechaza)
+        [HttpPost("devolucion")]
+        public async Task<IActionResult> CrearDevolucion([FromBody] NuevaDevolucionDTO request)
+        {
+            var solicitante = await _context.Usuarios.FirstOrDefaultAsync(u => u.CorreoElectronico == request.CorreoTecnico);
+            if (solicitante == null) return BadRequest(new { mensaje = "Usuario no encontrado." });
+
+            var repuesto = await _context.Repuestos.FindAsync(request.IdRepuesto);
+            if (repuesto == null) return NotFound(new { mensaje = "Repuesto no encontrado." });
+
+            var nuevaSolicitud = new Solicitude
+            {
+                IdUsuarioSolicitante = solicitante.IdUsuario,
+                IdRepuesto = repuesto.IdRepuesto,
+                TipoSolicitud = "Devolucion",
+                EstadoSolicitud = "Pendiente",
+                NotasAdicionales = "Devolución de equipo a bodega",
+                FechaSolicitud = DateTime.Now
+            };
+
+            _context.Solicitudes.Add(nuevaSolicitud);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { mensaje = "Solicitud de devolución enviada." });
+        }
+
+        [HttpPost("importacion")]
+        public async Task<IActionResult> CrearImportacion([FromBody] NuevaImportacionDTO request)
+        {
+            var solicitante = await _context.Usuarios.FirstOrDefaultAsync(u => u.CorreoElectronico == request.CorreoTecnico);
+            if (solicitante == null) return BadRequest(new { mensaje = "Usuario no encontrado." });
+
+            // 1. Buscamos cualquier bodega válida para asignar temporalmente el repuesto virtual
+            var bodegaTemporal = await _context.Bodegas.FirstOrDefaultAsync();
+            if (bodegaTemporal == null) return BadRequest(new { mensaje = "No hay bodegas configuradas en el sistema." });
+
+            // 2. Creamos el Repuesto Virtual
+            var repuestoVirtual = new Repuesto
+            {
+                NumeroSerial = "REQ-" + new Random().Next(10000, 99999).ToString(),
+                Nombre = request.ModeloRepuesto,
+                Descripcion = "Pendiente de importación especial",
+                IdBodega = bodegaTemporal.IdBodega,
+                EstadoOperativo = "En Trámite" // Estado lógico especial
+            };
+
+            _context.Repuestos.Add(repuestoVirtual);
+            await _context.SaveChangesAsync(); // Guardamos para que SQL genere el IdRepuesto
+
+            // 3. Atamos la solicitud a este nuevo repuesto virtual
+            var nuevaSolicitud = new Solicitude
+            {
+                IdUsuarioSolicitante = solicitante.IdUsuario,
+                IdRepuesto = repuestoVirtual.IdRepuesto,
+                TipoSolicitud = "Importación",
+                EstadoSolicitud = "Pendiente",
+                NotasAdicionales = request.Justificacion,
+                FechaSolicitud = DateTime.Now
+            };
+
+            _context.Solicitudes.Add(nuevaSolicitud);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { mensaje = "Solicitud de importación enviada al logístico." });
+        }
+
         [HttpPut("procesar/{id}")]
         public async Task<IActionResult> ProcesarSolicitud(int id, [FromBody] ProcesarSolicitudDTO request)
         {
@@ -96,32 +145,43 @@ namespace LogiCell.Server.Controllers
 
             if (solicitud == null) return NotFound(new { mensaje = "Solicitud no encontrada." });
 
-            // Registrar quién fue el logístico que atendió el caso
             var logistico = await _context.Usuarios.FirstOrDefaultAsync(u => u.CorreoElectronico == request.CorreoLogistico);
-            if (logistico != null)
-            {
-                solicitud.IdUsuarioAtiende = logistico.IdUsuario;
-            }
+            if (logistico != null) solicitud.IdUsuarioAtiende = logistico.IdUsuario;
 
             solicitud.FechaResolucion = DateTime.Now;
 
-            // Reacciones en cadena dependiendo del botón presionado en React
             if (request.EstadoNuevo == "Aprobado")
             {
-                solicitud.EstadoSolicitud = "Aprobada";
-                solicitud.IdRepuestoNavigation.EstadoOperativo = "Entregado";
+                if (solicitud.TipoSolicitud == "Devolucion")
+                {
+                    solicitud.EstadoSolicitud = "Completada";
+                    solicitud.IdRepuestoNavigation.EstadoOperativo = "Dado de baja";
+                }
+                else
+                {
+                    solicitud.EstadoSolicitud = "Aprobada";
+                    solicitud.IdRepuestoNavigation.EstadoOperativo = "Entregado";
+                }
             }
             else if (request.EstadoNuevo == "Rechazado")
             {
                 solicitud.EstadoSolicitud = "Rechazada";
                 solicitud.MotivoRechazo = request.MotivoRechazo;
-                // Devolvemos la pieza al estante para que otro técnico pueda pedirla
-                solicitud.IdRepuestoNavigation.EstadoOperativo = "Disponible";
+
+                // Si es un despacho y se rechaza, la pieza vuelve al estante
+                if (solicitud.TipoSolicitud == "Despacho")
+                {
+                    solicitud.IdRepuestoNavigation.EstadoOperativo = "Disponible";
+                }
+                // Si es una importación rechazada, el repuesto virtual se da de baja
+                else if (solicitud.TipoSolicitud == "Importación")
+                {
+                    solicitud.IdRepuestoNavigation.EstadoOperativo = "Dado de baja";
+                }
             }
 
             await _context.SaveChangesAsync();
-
-            return Ok(new { mensaje = $"Solicitud procesada correctamente." });
+            return Ok(new { mensaje = $"Solicitud procesada." });
         }
     }
 
@@ -141,7 +201,20 @@ namespace LogiCell.Server.Controllers
     public class NuevaSolicitudDTO
     {
         public string CorreoTecnico { get; set; } = null!;
-        public List<int> IdsRepuestos { get; set; } = new List<int>(); // Arreglo para el carrito
+        public List<int> IdsRepuestos { get; set; } = new List<int>();
+        public string Justificacion { get; set; } = null!;
+    }
+
+    public class NuevaDevolucionDTO
+    {
+        public string CorreoTecnico { get; set; } = null!;
+        public int IdRepuesto { get; set; }
+    }
+
+    public class NuevaImportacionDTO
+    {
+        public string CorreoTecnico { get; set; } = null!;
+        public string ModeloRepuesto { get; set; } = null!;
         public string Justificacion { get; set; } = null!;
     }
 

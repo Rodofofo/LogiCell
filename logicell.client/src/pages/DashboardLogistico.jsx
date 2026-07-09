@@ -2,67 +2,44 @@ import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Swal from 'sweetalert2';
-import { repuestosService } from '../services/api';
+import { repuestosService, solicitudesService } from '../services/api'; // Importamos ambos servicios
 
-// DashboardLogistico: vista del módulo logístico.
-// Comentarios técnicos generales añadidos (breves) para facilitar mantenimiento.
 const DashboardLogistico = () => {
-    // Estado: pestaña activa ('solicitudes' | 'inventario')
     const [tabActiva, setTabActiva] = useState('solicitudes');
 
-    // Inicia vacío, se llenará desde SQL Server
+    // --- ESTADOS INICIALIZADOS VACÍOS PARA LLENAR DESDE LA BD ---
     const [repuestos, setRepuestos] = useState([]);
+    const [solicitudes, setSolicitudes] = useState([]);
 
-    // Cargar repuestos reales al abrir la pantalla
+    // --- CARGA DE DATOS REALES ---
     const cargarRepuestos = async () => {
         try {
             const data = await repuestosService.obtenerTodos();
             setRepuestos(data);
         } catch (error) {
             console.error("Error al cargar repuestos:", error);
-            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo cargar el inventario.' });
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo cargar el inventario.' });
         }
     };
 
+    const cargarSolicitudes = async () => {
+        try {
+            const data = await solicitudesService.obtenerTodas();
+            setSolicitudes(data);
+        } catch (error) {
+            console.error("Error al cargar solicitudes:", error);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo cargar la bandeja de entrada.' });
+        }
+    };
+
+    // Cargar ambas tablas al abrir la pantalla
     useEffect(() => {
         cargarRepuestos();
+        cargarSolicitudes();
     }, []);
 
-    // 3. MOCK DATA: BANDEJA DE SOLICITUDES AMPLIADA (Tipos de solicitud mapeados con la BD)
-    const [solicitudes, setSolicitudes] = useState([
-        {
-            idSolicitud: 101,
-            tecnico: 'juan.tecnico@logicell.com',
-            fecha: '14/06/2026',
-            sitioMotivo: 'BTS-SJ-045 (Falla de Tx)',
-            materiales: '1x Transceptor RBS 6000',
-            tipoSolicitud: 'Despacho',
-            estado: 'Pendiente',
-            motivoRechazo: null
-        },
-        {
-            idSolicitud: 103,
-            tecnico: 'pedro.tecnico@logicell.com',
-            fecha: '14/06/2026',
-            sitioMotivo: 'ANT-OLD-99 (Pieza dañada en campo)',
-            materiales: '1x Antena Sectorial Dañada',
-            tipoSolicitud: 'Devolución',
-            estado: 'Pendiente',
-            motivoRechazo: null
-        },
-        {
-            idSolicitud: 104,
-            tecnico: 'maria.tecnico@logicell.com',
-            fecha: '13/06/2026',
-            sitioMotivo: 'Sitio Ampliación Limón (Sin Stock Local)',
-            materiales: 'Transceptor Ericsson Baseband 6630',
-            tipoSolicitud: 'Importación',
-            estado: 'Pendiente',
-            motivoRechazo: null
-        }
-    ]);
 
-    // Estados para modal de repuestos (crear/editar)
+    // --- MODALES DE INVENTARIO ---
     const [mostrarModal, setMostrarModal] = useState(false);
     const [modoEdicion, setModoEdicion] = useState(false);
     const [idEdicion, setIdEdicion] = useState(null);
@@ -71,8 +48,6 @@ const DashboardLogistico = () => {
     const [descripcion, setDescripcion] = useState('');
     const [bodega, setBodega] = useState('Metro Este');
 
-    // --- FUNCIONES DEL INVENTARIO ---
-    // Abrir modal en modo creación: limpiar campos
     const abrirModalCrear = () => {
         setModoEdicion(false);
         setSerial('');
@@ -82,7 +57,6 @@ const DashboardLogistico = () => {
         setMostrarModal(true);
     };
 
-    // Abrir modal en modo edición: cargar item a editar
     const abrirModalEditar = (item) => {
         setModoEdicion(true);
         setIdEdicion(item.idRepuesto);
@@ -93,10 +67,8 @@ const DashboardLogistico = () => {
         setMostrarModal(true);
     };
 
-    // Guardar repuesto: crea o actualiza según modoEdicion
     const handleSubmitRepuesto = async (e) => {
         e.preventDefault();
-
         const payload = {
             numeroSerial: serial,
             nombre: nombre,
@@ -113,7 +85,7 @@ const DashboardLogistico = () => {
                 Swal.fire({ icon: 'success', title: 'Registrado', text: 'Componente ingresado al inventario.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
             }
             setMostrarModal(false);
-            cargarRepuestos(); // Recarga la tabla para ver los cambios de la BD
+            cargarRepuestos();
         } catch (error) {
             Swal.fire({
                 icon: 'error',
@@ -124,7 +96,6 @@ const DashboardLogistico = () => {
         }
     };
 
-    // Marcar repuesto como dado de baja (no elimina, solo cambia estado)
     const handleDarDeBaja = async (idRepuesto) => {
         const confirmacion = await Swal.fire({
             title: '¿Dar de baja este componente?',
@@ -140,18 +111,16 @@ const DashboardLogistico = () => {
             try {
                 await repuestosService.darDeBaja(idRepuesto);
                 Swal.fire({ icon: 'success', title: 'Completado', text: 'Estado actualizado.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
-                cargarRepuestos(); // Refresca la lista
+                cargarRepuestos();
             } catch (error) {
                 Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo dar de baja el componente.' });
             }
         }
     };
 
-    // --- FUNCIONES DE LA BANDEJA DE SOLICITUDES (CON RECHAZO CON MOTIVO RF10) ---
-    // Procesar solicitud: aprobar o rechazar (rechazo requiere motivo)
+    // --- PROCESAR SOLICITUDES (CONEXIÓN A C#) ---
     const handleProcesarSolicitud = async (idSolicitud, nuevoEstado) => {
         if (nuevoEstado === 'Rechazado') {
-            // Pedir motivo antes de rechazar (cumple RF10)
             const { value: motivo } = await Swal.fire({
                 title: 'Rechazar Solicitud',
                 text: 'Por favor, ingrese el motivo del rechazo para notificar al técnico:',
@@ -173,13 +142,23 @@ const DashboardLogistico = () => {
             });
 
             if (motivo) {
-                setSolicitudes(solicitudes.map(sol =>
-                    sol.idSolicitud === idSolicitud ? { ...sol, estado: 'Rechazado', motivoRechazo: motivo } : sol
-                ));
-                Swal.fire({ icon: 'error', title: 'Solicitud Rechazada', text: 'Se registró el motivo y se liberó el flujo.', background: '#212529', color: '#fff', timer: 2000, showConfirmButton: false });
+                try {
+                    await solicitudesService.procesar(idSolicitud, {
+                        estadoNuevo: 'Rechazado',
+                        motivoRechazo: motivo,
+                        correoLogistico: localStorage.getItem('userCorreo')
+                    });
+
+                    Swal.fire({ icon: 'error', title: 'Solicitud Rechazada', text: 'Se registró el motivo y se liberó el flujo.', background: '#212529', color: '#fff', timer: 2000, showConfirmButton: false });
+
+                    // Recargamos ambas tablas porque al rechazar, la pieza vuelve a "Disponible"
+                    cargarSolicitudes();
+                    cargarRepuestos();
+                } catch (error) {
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Hubo un problema al procesar el rechazo.' });
+                }
             }
         } else {
-            // Confirmar aprobación antes de cambiar estado
             const confirmacion = await Swal.fire({
                 title: '¿Aprobar esta transacción?',
                 text: `La solicitud cambiará al estado de ${nuevoEstado}.`,
@@ -192,10 +171,21 @@ const DashboardLogistico = () => {
             });
 
             if (confirmacion.isConfirmed) {
-                setSolicitudes(solicitudes.map(sol =>
-                    sol.idSolicitud === idSolicitud ? { ...sol, estado: nuevoEstado } : sol
-                ));
-                Swal.fire({ icon: 'success', title: 'Aprobado', text: 'Transacción procesada correctamente.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+                try {
+                    await solicitudesService.procesar(idSolicitud, {
+                        estadoNuevo: 'Aprobado',
+                        motivoRechazo: null,
+                        correoLogistico: localStorage.getItem('userCorreo')
+                    });
+
+                    Swal.fire({ icon: 'success', title: 'Aprobado', text: 'Transacción procesada correctamente.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
+
+                    // Recargamos ambas tablas porque al aprobar, la pieza pasa a "Entregado"
+                    cargarSolicitudes();
+                    cargarRepuestos();
+                } catch (error) {
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Hubo un problema al aprobar la solicitud.' });
+                }
             }
         }
     };
@@ -203,9 +193,9 @@ const DashboardLogistico = () => {
     return (
         <div className="d-flex flex-column min-vh-100 bg-dark">
             <Navbar />
-
             <div className="flex-grow-1 container-fluid p-4 text-light pb-5">
-                {/* 1. DASHBOARD INFORMATIVO / CONTADORES SUPERIORES (RF7) */}
+
+                {/* 1. DASHBOARD INFORMATIVO / CONTADORES */}
                 <div className="row mb-4">
                     <div className="col-xl-3 col-md-6 mb-3">
                         <div className="card bg-secondary border-0 shadow-sm text-light h-100">
@@ -352,11 +342,16 @@ const DashboardLogistico = () => {
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    <span className="text-white-50 small italic">Procesada</span>
+                                                    <span className="text-white-50 small fst-italic">Procesada</span>
                                                 )}
                                             </td>
                                         </tr>
                                     ))}
+                                    {solicitudes.length === 0 && (
+                                        <tr>
+                                            <td colSpan="8" className="text-center py-4 text-white-50">No hay solicitudes en la bandeja...</td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -394,13 +389,19 @@ const DashboardLogistico = () => {
                                                     <i className="bi bi-geo-alt-fill text-danger me-2"></i>{item.bodega}
                                                 </td>
                                                 <td className="align-middle">
-                                                    <span className={`badge ${item.estadoOperativo === 'Disponible' ? 'bg-success' : item.estadoOperativo === 'Dado de baja' ? 'bg-danger' : 'bg-warning text-dark'}`}>
+                                                    <span className={`badge ${
+                                                        item.estadoOperativo === 'Disponible' ? 'bg-success' :
+                                                        item.estadoOperativo === 'Dado de baja' ? 'bg-danger' :
+                                                        item.estadoOperativo === 'Entregado' ? 'bg-primary' :
+                                                        item.estadoOperativo === 'En Trámite' ? 'bg-info text-dark' :
+                                                        'bg-warning text-dark'
+                                                        }`}>
                                                         {item.estadoOperativo}
                                                     </span>
                                                 </td>
                                                 <td className="align-middle text-center">
-                                                    <button onClick={() => abrirModalEditar(item)} className="btn btn-sm btn-outline-info me-2" title="Editar" disabled={item.estadoOperativo === 'Dado de baja'}><i className="bi bi-pencil-square"></i></button>
-                                                    <button onClick={() => handleDarDeBaja(item.idRepuesto)} className="btn btn-sm btn-outline-danger" title="Dar de baja" disabled={item.estadoOperativo === 'Dado de baja'}><i className="bi bi-trash-fill"></i></button>
+                                                    <button onClick={() => abrirModalEditar(item)} className="btn btn-sm btn-outline-info me-2" title="Editar" disabled={item.estadoOperativo === 'Dado de baja' || item.estadoOperativo === 'Reservado' || item.estadoOperativo === 'Entregado'}><i className="bi bi-pencil-square"></i></button>
+                                                    <button onClick={() => handleDarDeBaja(item.idRepuesto)} className="btn btn-sm btn-outline-danger" title="Dar de baja" disabled={item.estadoOperativo === 'Dado de baja' || item.estadoOperativo === 'Reservado' || item.estadoOperativo === 'Entregado'}><i className="bi bi-trash-fill"></i></button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -433,7 +434,6 @@ const DashboardLogistico = () => {
                                         <div className="col-md-6 mb-3">
                                             <label className="form-label small fw-bold">Bodega de Destino</label>
                                             <select className="form-select bg-secondary text-light border-dark" value={bodega} onChange={(e) => setBodega(e.target.value)}>
-                                                {/* Zonas actualizadas */}
                                                 <option value="Chorotega">Chorotega</option>
                                                 <option value="Huetar">Huetar</option>
                                                 <option value="Brunca">Brunca</option>
