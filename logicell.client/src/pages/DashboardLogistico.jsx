@@ -1,3 +1,5 @@
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -119,7 +121,7 @@ const DashboardLogistico = () => {
     };
 
     // --- PROCESAR SOLICITUDES (CONEXIÓN A C#) ---
-    const handleProcesarSolicitud = async (idSolicitud, nuevoEstado) => {
+    const handleProcesarSolicitud = async (solicitud, nuevoEstado) => {
         if (nuevoEstado === 'Rechazado') {
             const { value: motivo } = await Swal.fire({
                 title: 'Rechazar Solicitud',
@@ -143,7 +145,7 @@ const DashboardLogistico = () => {
 
             if (motivo) {
                 try {
-                    await solicitudesService.procesar(idSolicitud, {
+                    await solicitudesService.procesar(solicitud.idSolicitud, {
                         estadoNuevo: 'Rechazado',
                         motivoRechazo: motivo,
                         correoLogistico: localStorage.getItem('userCorreo')
@@ -151,7 +153,6 @@ const DashboardLogistico = () => {
 
                     Swal.fire({ icon: 'error', title: 'Solicitud Rechazada', text: 'Se registró el motivo y se liberó el flujo.', background: '#212529', color: '#fff', timer: 2000, showConfirmButton: false });
 
-                    // Recargamos ambas tablas porque al rechazar, la pieza vuelve a "Disponible"
                     cargarSolicitudes();
                     cargarRepuestos();
                 } catch (error) {
@@ -172,7 +173,7 @@ const DashboardLogistico = () => {
 
             if (confirmacion.isConfirmed) {
                 try {
-                    await solicitudesService.procesar(idSolicitud, {
+                    await solicitudesService.procesar(solicitud.idSolicitud, {
                         estadoNuevo: 'Aprobado',
                         motivoRechazo: null,
                         correoLogistico: localStorage.getItem('userCorreo')
@@ -180,7 +181,9 @@ const DashboardLogistico = () => {
 
                     Swal.fire({ icon: 'success', title: 'Aprobado', text: 'Transacción procesada correctamente.', background: '#212529', color: '#fff', timer: 1500, showConfirmButton: false });
 
-                    // Recargamos ambas tablas porque al aprobar, la pieza pasa a "Entregado"
+                    // --- AQUÍ LLAMAMOS AL GENERADOR DE PDF ---
+                    generarReporteAprobacion(solicitud);
+
                     cargarSolicitudes();
                     cargarRepuestos();
                 } catch (error) {
@@ -188,6 +191,53 @@ const DashboardLogistico = () => {
                 }
             }
         }
+    };
+
+    // --- NUEVO: Función para generar PDF (RF13) ---
+    const generarReporteAprobacion = (solicitud) => {
+        const doc = new jsPDF();
+
+        // Título y Encabezado
+        doc.setFontSize(18);
+        doc.setTextColor(40, 40, 40);
+        doc.text('Comprobante de Despacho de Repuestos', 14, 22);
+
+        doc.setFontSize(11);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Sistema de Gestión LogiCell', 14, 30);
+        doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString()}`, 14, 36);
+        doc.text(`Aprobado por: ${localStorage.getItem('userCorreo')}`, 14, 42);
+
+        // Estructurar los datos para la tabla
+        const tableData = [
+            ['ID de Trámite', `#${solicitud.idSolicitud}`],
+            ['Tipo de Trámite', solicitud.tipoSolicitud],
+            ['Técnico Solicitante', solicitud.tecnico],
+            ['Repuesto / Materiales', solicitud.materiales],
+            ['Justificación y Sitio', solicitud.sitioMotivo],
+            ['Fecha de Solicitud', solicitud.fecha],
+            ['Fecha Límite Devolución', solicitud.fechaLimite !== "N/A" ? solicitud.fechaLimite : "1 Mes a partir de hoy"]
+        ];
+
+        // Dibujar la tabla
+        doc.autoTable({
+            startY: 50,
+            head: [['Campo', 'Detalle de la Operación']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [25, 135, 84] }, // Verde success de Bootstrap
+            styles: { fontSize: 10, cellPadding: 4 },
+            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } }
+        });
+
+        // Espacio para firmas
+        const finalY = doc.lastAutoTable.finalY || 50;
+        doc.setFontSize(10);
+        doc.text('Firma Logística: _______________________', 14, finalY + 40);
+        doc.text('Firma Técnico: _______________________', 110, finalY + 40);
+
+        // Descargar el archivo
+        doc.save(`Aprobacion_LogiCell_REQ${solicitud.idSolicitud}.pdf`);
     };
 
     return (
@@ -332,14 +382,14 @@ const DashboardLogistico = () => {
                                                 {sol.estado === 'Pendiente' ? (
                                                     <div className="d-flex justify-content-center">
                                                         <button
-                                                            onClick={() => handleProcesarSolicitud(sol.idSolicitud, 'Aprobado')}
+                                                            onClick={() => handleProcesarSolicitud(sol, 'Aprobado')}
                                                             className="btn btn-sm btn-success me-2"
                                                             title={sol.tipoSolicitud === 'Importación' ? 'Autorizar Importación' : 'Aprobar Transacción'}
                                                         >
                                                             <i className="bi bi-check-lg"></i>
                                                         </button>
                                                         <button
-                                                            onClick={() => handleProcesarSolicitud(sol.idSolicitud, 'Rechazado')}
+                                                            onClick={() => handleProcesarSolicitud(sol, 'Rechazado')}
                                                             className="btn btn-sm btn-danger"
                                                             title="Rechazar e ingresar motivo"
                                                         >

@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Net;
+using System.Net.Mail;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using LogiCell.Server.Models;
 using System;
@@ -141,6 +143,7 @@ namespace LogiCell.Server.Controllers
         {
             var solicitud = await _context.Solicitudes
                 .Include(s => s.IdRepuestoNavigation)
+                .Include(s => s.IdUsuarioSolicitanteNavigation) // Ocupamos el correo del técnico
                 .FirstOrDefaultAsync(s => s.IdSolicitud == id);
 
             if (solicitud == null) return NotFound(new { mensaje = "Solicitud no encontrada." });
@@ -155,7 +158,6 @@ namespace LogiCell.Server.Controllers
                 if (solicitud.TipoSolicitud == "Devolucion")
                 {
                     solicitud.EstadoSolicitud = "Completada";
-
                     if (solicitud.NotasAdicionales != null && solicitud.NotasAdicionales.Contains("Disponible"))
                     {
                         solicitud.IdRepuestoNavigation.EstadoOperativo = "Disponible";
@@ -167,17 +169,35 @@ namespace LogiCell.Server.Controllers
                 }
                 else
                 {
-                    // Toda solicitud aprobada que NO sea devolución (Despacho o Importación) pasa a Entregado al técnico
+                    // Es un Despacho o Importación Aprobada
                     solicitud.EstadoSolicitud = "Aprobada";
                     solicitud.IdRepuestoNavigation.EstadoOperativo = "Entregado";
                     solicitud.FechaEsperadaDevolucion = DateTime.Now.AddMonths(1);
+
+                    // ==========================================
+                    // REQUERIMIENTO RF12: CÁLCULO DE TIEMPO
+                    // ==========================================
+                    var bodega = await _context.Bodegas.FindAsync(solicitud.IdRepuestoNavigation.IdBodega);
+                    var infoTecnico = await _context.InformacionPersonals.FirstOrDefaultAsync(ip => ip.IdUsuario == solicitud.IdUsuarioSolicitante);
+
+                    string regionBodega = bodega != null && bodega.NombreBodega.Contains("Metro") ? "Metro" : bodega?.NombreBodega ?? "";
+                    string regionTecnico = infoTecnico?.RegionAsignada ?? "Metro"; // Por defecto si es null
+
+                    int diasCalculados = CalcularDiasEntrega(regionTecnico, regionBodega);
+
+                    // Disparar envío de correo
+                    _ = EnviarCorreoEntrega(
+                        solicitud.IdUsuarioSolicitanteNavigation.CorreoElectronico,
+                        solicitud.IdRepuestoNavigation.Nombre,
+                        bodega?.NombreBodega ?? "Bodega Central",
+                        diasCalculados
+                    );
                 }
             }
             else if (request.EstadoNuevo == "Rechazado")
             {
                 solicitud.EstadoSolicitud = "Rechazada";
                 solicitud.MotivoRechazo = request.MotivoRechazo;
-                
                 if (solicitud.TipoSolicitud == "Despacho")
                 {
                     solicitud.IdRepuestoNavigation.EstadoOperativo = "Disponible";
@@ -190,6 +210,66 @@ namespace LogiCell.Server.Controllers
 
             await _context.SaveChangesAsync();
             return Ok(new { mensaje = $"Solicitud procesada." });
+        }
+
+        // --- MATRIZ DE REGLAS DE NEGOCIO (RF12) ---
+        private int CalcularDiasEntrega(string regionTecnico, string regionBodega)
+        {
+            // 1. Misma región o ambos en Metro = 1 día
+            if (regionTecnico == regionBodega) return 1;
+
+            bool techIsMetro = regionTecnico == "Metro";
+            bool bodegaIsMetro = regionBodega == "Metro";
+
+            // 2. De Metro a Rural o de Rural a Metro = 2 días
+            if (techIsMetro || bodegaIsMetro) return 2;
+
+            // 3. De Rural a Rural (Diferentes) = 3 días
+            return 3;
+        }
+
+        // --- MÓDULO DE ENVÍO DE CORREO SMTP (RF12) ---
+        private async Task EnviarCorreoEntrega(string correoDestino, string repuesto, string bodegaOrigen, int dias)
+        {
+            try
+            {
+                // CONFIGURA TUS CREDENCIALES REALES AQUÍ PARA LA PRESENTACIÓN
+                string remitente = "nerra30@gmail.com";
+                string contrasena = "ffugonlwgibwsdgg";
+
+                MailMessage mail = new MailMessage();
+                mail.From = new MailAddress(remitente, "LogiCell System");
+                mail.To.Add(correoDestino);
+                mail.Subject = $"Aprobación de Despacho: {repuesto}";
+
+                string textoDias = dias == 1 ? "1 día hábil" : $"{dias} días hábiles";
+
+                mail.Body = $@"
+                    <h2>Solicitud Aprobada</h2>
+                    <p>Estimado Técnico,</p>
+                    <p>Su solicitud de repuesto ha sido procesada exitosamente por el departamento logístico.</p>
+                    <ul>
+                        <li><strong>Repuesto:</strong> {repuesto}</li>
+                        <li><strong>Bodega de Origen:</strong> {bodegaOrigen}</li>
+                        <li><strong>Tiempo estimado de entrega:</strong> {textoDias}</li>
+                    </ul>
+                    <p>Por favor, asegúrese de registrar la devolución de la pieza dañada en el aplicativo una vez finalice el mantenimiento.</p>
+                    <p><i>- LogiCell AutoMailer -</i></p>";
+
+                mail.IsBodyHtml = true;
+
+                using (SmtpClient smtp = new SmtpClient("smtp.gmail.com", 587))
+                {
+                    smtp.Credentials = new NetworkCredential(remitente, contrasena);
+                    smtp.EnableSsl = true;
+                    await smtp.SendMailAsync(mail);
+                }
+            }
+            catch (Exception ex)
+            {
+                // El correo falló (probablemente por credenciales), pero no detenemos el sistema
+                Console.WriteLine("Error enviando correo: " + ex.Message);
+            }
         }
     }
 

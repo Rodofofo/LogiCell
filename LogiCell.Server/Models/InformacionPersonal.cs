@@ -15,5 +15,7 @@ public partial class InformacionPersonal
 
     public string? NumeroEmpleado { get; set; }
 
+    public string? RegionAsignada { get; set; }
+
     public virtual Usuario IdUsuarioNavigation { get; set; } = null!;
 }
